@@ -1,4 +1,4 @@
-.PHONY: all build test check fmt fmt-check clean deps install run help
+.PHONY: all build test integration-test check fmt fmt-check clean deps install run help
 
 DUNE ?= dune
 OPAM ?= opam
@@ -14,7 +14,10 @@ build:
 test:
 	$(DUNE) test
 
-check: build test fmt-check
+integration-test:
+	test/integration/e2e.sh
+
+check: build test integration-test fmt-check
 
 fmt:
 	$(OCAMLFORMAT) --inplace $(ML_SOURCES)
@@ -39,6 +42,8 @@ help:
 		'Targets:' \
 		'  make build      Build the project' \
 		'  make test       Run the test suite' \
+		'  make integration-test' \
+		'                  Run end-to-end CLI integration tests' \
 		'  make check      Build, test, and check formatting' \
 		'  make fmt        Format OCaml sources' \
 		'  make fmt-check  Check OCaml formatting' \

@@ -81,3 +81,14 @@ dune build
 dune test
 find lib bin test \( -name '*.ml' -o -name '*.mli' \) -print | xargs ocamlformat --check
 ```
+
+Or use the Makefile:
+
+```sh
+make check
+make integration-test
+```
+
+`make integration-test` runs the compiled CLI end to end, including exit codes,
+stdout/stderr behavior, JSON output, stdin input, crontab files, and Kubernetes
+CronJob YAML.

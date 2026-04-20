@@ -22,13 +22,16 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install dependencies
-        run: opam install . --deps-only --with-test
+        run: opam install --yes . --deps-only --with-test
 
       - name: Build
-        run: opam exec -- dune build
+        run: opam exec -- make build
 
       - name: Test
-        run: opam exec -- dune test
+        run: opam exec -- make test
+
+      - name: Integration test
+        run: opam exec -- make integration-test
 
   format:
     name: Format
@@ -42,7 +45,7 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install formatter
-        run: opam install ocamlformat.0.26.2
+        run: opam install --yes ocamlformat.0.26.2
 
       - name: Check formatting
-        run: find lib bin test \( -name '*.ml' -o -name '*.mli' \) -print | xargs opam exec -- ocamlformat --check
+        run: opam exec -- make fmt-check

@@ -21,12 +21,13 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install dependencies
-        run: opam install . --deps-only --with-test
+        run: opam install --yes . --deps-only --with-test
 
       - name: Build and test
         run: |
-          opam exec -- dune build
-          opam exec -- dune test
+          opam exec -- make build
+          opam exec -- make test
+          opam exec -- make integration-test
 
       - name: Package binary
         run: |
@@ -46,4 +47,3 @@ jobs:
         with:
           files: croncheck-linux-x86_64.tar.gz
           generate_release_notes: true
-
