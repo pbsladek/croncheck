@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-binary:
+    name: Build Linux binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.2"
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      - name: Build and test
+        run: |
+          opam exec -- dune build
+          opam exec -- dune test
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp _build/default/bin/main.exe dist/croncheck-linux-x86_64
+          chmod +x dist/croncheck-linux-x86_64
+          tar -C dist -czf croncheck-linux-x86_64.tar.gz croncheck-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: croncheck-linux-x86_64
+          path: croncheck-linux-x86_64.tar.gz
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: croncheck-linux-x86_64.tar.gz
+          generate_release_notes: true
+

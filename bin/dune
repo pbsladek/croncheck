@@ -1,0 +1,4 @@
+(executable
+ (name main)
+ (public_name croncheck)
+ (libraries croncheck_lib cmdliner ptime ptime.clock.os fmt))

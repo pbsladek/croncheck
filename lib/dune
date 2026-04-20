@@ -1,0 +1,3 @@
+(library
+ (name croncheck_lib)
+ (libraries ptime fmt yojson))
