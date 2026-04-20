@@ -1,8 +1,4 @@
-type source =
-  | Cli
-  | Stdin
-  | CrontabFile of string
-  | KubernetesYaml of string
+type source = Cli | Stdin | CrontabFile of string | KubernetesYaml of string
 
 type t = {
   id : string option;
@@ -25,4 +21,3 @@ val make :
 
 val source_to_string : source -> string
 val label : t -> string
-

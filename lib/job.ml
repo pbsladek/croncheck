@@ -1,8 +1,4 @@
-type source =
-  | Cli
-  | Stdin
-  | CrontabFile of string
-  | KubernetesYaml of string
+type source = Cli | Stdin | CrontabFile of string | KubernetesYaml of string
 
 type t = {
   id : string option;
@@ -27,8 +23,8 @@ let source_to_string = function
 
 let label job =
   match (job.id, job.line) with
-  | Some id, Some line -> Printf.sprintf "%s:%d %s" (source_to_string job.source) line id
+  | Some id, Some line ->
+      Printf.sprintf "%s:%d %s" (source_to_string job.source) line id
   | Some id, None -> id
   | None, Some line -> Printf.sprintf "%s:%d" (source_to_string job.source) line
   | None, None -> job.expr_raw
-
