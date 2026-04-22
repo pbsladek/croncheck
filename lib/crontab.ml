@@ -1,4 +1,4 @@
-type error = { line : int; message : string }
+type error = { line : int option; message : string }
 
 let trim = String.trim
 
@@ -41,7 +41,7 @@ let parse_line ~system ~source_path line_no line =
         | None ->
             Error
               {
-                line = line_no;
+                line = Some line_no;
                 message =
                   Cron.parse_error_to_string (InvalidSyntax ("macro", macro));
               }
@@ -54,7 +54,7 @@ let parse_line ~system ~source_path line_no line =
               else (None, command_parts)
             in
             if command_parts = [] then
-              Error { line = line_no; message = "missing crontab command" }
+              Error { line = Some line_no; message = "missing crontab command" }
             else
               let command = String.concat " " command_parts in
               match
@@ -64,13 +64,16 @@ let parse_line ~system ~source_path line_no line =
               | Ok job -> Ok (Some job)
               | Error e ->
                   Error
-                    { line = line_no; message = Cron.parse_error_to_string e }))
+                    {
+                      line = Some line_no;
+                      message = Cron.parse_error_to_string e;
+                    }))
     | _ -> (
         match take 5 parts with
         | None ->
             Error
               {
-                line = line_no;
+                line = Some line_no;
                 message = "not enough fields for a crontab entry";
               }
         | Some (expr_parts, rest) -> (
@@ -83,7 +86,7 @@ let parse_line ~system ~source_path line_no line =
               else (None, rest)
             in
             if command_parts = [] then
-              Error { line = line_no; message = "missing crontab command" }
+              Error { line = Some line_no; message = "missing crontab command" }
             else
               let command = String.concat " " command_parts in
               match
@@ -93,7 +96,10 @@ let parse_line ~system ~source_path line_no line =
               | Ok job -> Ok (Some job)
               | Error e ->
                   Error
-                    { line = line_no; message = Cron.parse_error_to_string e }))
+                    {
+                      line = Some line_no;
+                      message = Cron.parse_error_to_string e;
+                    }))
 
 let parse_lines ?(system = false) ~source_path lines =
   let jobs, errors =
@@ -124,4 +130,6 @@ let read_lines path =
       loop [])
 
 let parse_file ?system path =
-  parse_lines ?system ~source_path:path (read_lines path)
+  match read_lines path with
+  | lines -> parse_lines ?system ~source_path:path lines
+  | exception Sys_error message -> Error [ { line = None; message } ]

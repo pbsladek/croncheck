@@ -24,6 +24,15 @@ let test_warn_high_frequency () =
        (function Analysis.HighFrequency _ -> true | _ -> false)
        warnings)
 
+let test_warn_quartz_high_frequency_seconds () =
+  let warnings = Analysis.warn (expr "*/10 */2 * * * ?") in
+  Alcotest.(check bool)
+    "quartz seconds high frequency" true
+    (has_warning
+       (function
+         | Analysis.HighFrequency { per_hour = 180 } -> true | _ -> false)
+       warnings)
+
 let test_warn_never () =
   let warnings = Analysis.warn (expr "0 0 30 2 *") in
   Alcotest.(check bool)
@@ -89,6 +98,8 @@ let () =
         [
           Alcotest.test_case "end of month" `Quick test_warn_end_of_month;
           Alcotest.test_case "high frequency" `Quick test_warn_high_frequency;
+          Alcotest.test_case "quartz high frequency seconds" `Quick
+            test_warn_quartz_high_frequency_seconds;
           Alcotest.test_case "never" `Quick test_warn_never;
           Alcotest.test_case "dom dow" `Quick test_warn_dom_dow;
           Alcotest.test_case "daily clean" `Quick test_warn_daily_clean;

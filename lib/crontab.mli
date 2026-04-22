@@ -1,4 +1,4 @@
-type error = { line : int; message : string }
+type error = { line : int option; message : string }
 
 val parse_lines :
   ?system:bool ->

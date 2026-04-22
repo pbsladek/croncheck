@@ -68,6 +68,12 @@ let test_quartz_seconds () =
   in
   Alcotest.(check (list ptime)) "quartz seconds" [ expected ] times
 
+let test_quartz_past_year_stops () =
+  let times =
+    Schedule.next_n (expr "0 0 0 * * ? 2024") ~from:(time 2025 1 1 0 0) 1
+  in
+  Alcotest.(check (list ptime)) "past year" [] times
+
 let test_names_schedule () =
   let times =
     Schedule.next_n (expr "0 9 * JAN MON") ~from:(time 2023 12 31 23 59) 2
@@ -106,6 +112,8 @@ let () =
           Alcotest.test_case "ascending" `Quick test_ascending;
           Alcotest.test_case "timezone offset" `Quick test_timezone_offset;
           Alcotest.test_case "quartz seconds" `Quick test_quartz_seconds;
+          Alcotest.test_case "quartz past year stops" `Quick
+            test_quartz_past_year_stops;
           Alcotest.test_case "names" `Quick test_names_schedule;
           Alcotest.test_case "named steps" `Quick test_named_step_schedule;
           Alcotest.test_case "macros" `Quick test_macro_schedule;

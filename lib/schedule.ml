@@ -90,7 +90,10 @@ let possible compiled =
         (fun m ->
           List.exists
             (fun d ->
-              match Ptime.of_date_time ((y, m, d), ((0, 0, 0), 0)) with
+              match
+                Ptime.of_date_time
+                  ((y, m, d), ((0, 0, 0), tz_offset compiled.timezone))
+              with
               | None -> false
               | Some t ->
                   day_matches compiled ~dom:d ~dow:(dow compiled.timezone t))
@@ -163,6 +166,16 @@ let matches_compiled compiled t =
 
 let add_seconds t seconds = Ptime.add_span t (Ptime.Span.of_int_s seconds)
 
+let after_last_year compiled t =
+  match compiled.years with
+  | None -> false
+  | Some years -> (
+      match List.rev years.members with
+      | [] -> true
+      | last_year :: _ ->
+          let (year, _, _), _ = date_time compiled.timezone t in
+          year > last_year)
+
 let next_minute_after timezone t =
   match add_seconds t 60 with
   | None -> None
@@ -200,7 +213,8 @@ let fire_times_compiled compiled ~from =
           match next_minute_after compiled.timezone cursor with
           | None -> Seq.Nil
           | Some candidate ->
-              if matches_compiled compiled candidate then
+              if after_last_year compiled candidate then Seq.Nil
+              else if matches_compiled compiled candidate then
                 Seq.Cons (candidate, loop candidate)
               else loop candidate ()
         in
@@ -210,7 +224,8 @@ let fire_times_compiled compiled ~from =
           match next_minute_after compiled.timezone cursor with
           | None -> None
           | Some minute ->
-              if minute_matches compiled minute then Some minute
+              if after_last_year compiled minute then None
+              else if minute_matches compiled minute then Some minute
               else matching_minute minute
         in
         let candidates_after cursor minute =

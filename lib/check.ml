@@ -43,7 +43,9 @@ let load = function
       | Error errors ->
           errors
           |> List.map (fun e ->
-                 Printf.sprintf "%s:%d: %s" path e.Crontab.line e.message)
+                 match e.Crontab.line with
+                 | Some line -> Printf.sprintf "%s:%d: %s" path line e.message
+                 | None -> Printf.sprintf "%s: %s" path e.message)
           |> Result.error)
   | Kubernetes path -> (
       match Kubernetes.parse_file path with

@@ -166,4 +166,8 @@ let read_lines path =
       in
       loop [])
 
-let parse_file path = parse_lines ~source_path:path (read_lines path)
+let parse_file path =
+  match read_lines path with
+  | lines -> parse_lines ~source_path:path lines
+  | exception Sys_error message ->
+      Error [ { file = path; line = None; message } ]

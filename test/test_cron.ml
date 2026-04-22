@@ -49,6 +49,11 @@ let test_parse_invalid () =
       | Error _ -> ())
     cases
 
+let test_parse_invalid_quartz_day_fields () =
+  match Cron.parse "0 0 0 ? * ?" with
+  | Ok _ -> Alcotest.fail "expected both Quartz day fields unspecified to fail"
+  | Error _ -> ()
+
 let test_expand () =
   Alcotest.(check (list int)) "any" [ 0; 1; 2 ] (Cron.expand Any ~min:0 ~max:2);
   Alcotest.(check (list int))
@@ -168,6 +173,8 @@ let () =
           Alcotest.test_case "valid" `Quick test_parse_valid;
           Alcotest.test_case "quartz" `Quick test_parse_quartz;
           Alcotest.test_case "invalid" `Quick test_parse_invalid;
+          Alcotest.test_case "invalid quartz day fields" `Quick
+            test_parse_invalid_quartz_day_fields;
         ] );
       ("expand", [ Alcotest.test_case "fields" `Quick test_expand ]);
       ( "extensions",

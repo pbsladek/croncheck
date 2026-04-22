@@ -28,9 +28,11 @@ let dom_values = function
   | Cron.Posix expr -> Cron.expand expr.dom ~min:1 ~max:31
   | Quartz expr -> Cron.day_field_values expr.dom ~min:1 ~max:31
 
-let minute_values = function
-  | Cron.Posix expr -> Cron.expand expr.minute ~min:0 ~max:59
-  | Quartz expr -> Cron.expand expr.minute ~min:0 ~max:59
+let fires_per_hour = function
+  | Cron.Posix expr -> List.length (Cron.expand expr.minute ~min:0 ~max:59)
+  | Quartz expr ->
+      List.length (Cron.expand expr.minute ~min:0 ~max:59)
+      * List.length (Cron.expand expr.second ~min:0 ~max:59)
 
 let contains_only_gt_28 expr =
   match dom_values expr with [] -> false | xs -> List.for_all (( < ) 28) xs
@@ -57,7 +59,7 @@ let warn ?(timezone = Timezone.utc) ?(from = default_from) expr =
     count_in_window_until ~limit:1 compiled ~from four_years
   in
   let year_count = count_in_window_until ~limit:12 compiled ~from one_year in
-  let per_hour = List.length (minute_values expr) in
+  let per_hour = fires_per_hour expr in
   []
   |> (fun warnings ->
        if four_year_count = 0 then NeverFires :: warnings else warnings)

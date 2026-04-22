@@ -120,6 +120,8 @@ let parse_day_field spec raw =
       let+ field = parse_field spec raw in
       Specific field
 
+let day_field_is_specific = function Specific _ -> true | No_specific -> false
+
 let spec ?(aliases = []) name min max =
   { name; min; max; normalize = Fun.id; aliases }
 
@@ -205,7 +207,9 @@ let parse_quartz_fields = function
             let+ field = parse_field year_spec raw in
             Some field
       in
-      Ok (Quartz { second; minute; hour; dom; month; dow; year })
+      if (not (day_field_is_specific dom)) && not (day_field_is_specific dow)
+      then Error (InvalidSyntax ("day-of-month/day-of-week", "? ?"))
+      else Ok (Quartz { second; minute; hour; dom; month; dow; year })
   | fields -> Error (InvalidFieldCount (List.length fields))
 
 let parse_quartz s = parse_quartz_fields (Util.split_words s)
@@ -242,5 +246,3 @@ let day_field_values field ~min ~max =
   match field with
   | Specific field -> expand field ~min ~max
   | No_specific -> expand Any ~min ~max
-
-let day_field_is_specific = function Specific _ -> true | No_specific -> false

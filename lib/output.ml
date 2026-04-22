@@ -1,7 +1,55 @@
 type format = Plain | Json
+type time_format = Rfc3339 | Human
 
-let string_of_time ?(timezone = Timezone.utc) t =
-  Ptime.to_rfc3339 ~tz_offset_s:(Timezone.offset_seconds timezone) t
+let month_name = function
+  | 1 -> "January"
+  | 2 -> "February"
+  | 3 -> "March"
+  | 4 -> "April"
+  | 5 -> "May"
+  | 6 -> "June"
+  | 7 -> "July"
+  | 8 -> "August"
+  | 9 -> "September"
+  | 10 -> "October"
+  | 11 -> "November"
+  | 12 -> "December"
+  | _ -> invalid_arg "invalid month"
+
+let weekday_name = function
+  | `Mon -> "Mon"
+  | `Tue -> "Tue"
+  | `Wed -> "Wed"
+  | `Thu -> "Thu"
+  | `Fri -> "Fri"
+  | `Sat -> "Sat"
+  | `Sun -> "Sun"
+
+let human_hour hour = match hour mod 12 with 0 -> 12 | hour -> hour
+let meridiem hour = if hour < 12 then "AM" else "PM"
+
+let human_time timezone t =
+  let tz_offset_s = Timezone.offset_seconds timezone in
+  let (year, month, day), ((hour, minute, second), _tz) =
+    Ptime.to_date_time ~tz_offset_s t
+  in
+  let weekday = Ptime.weekday ~tz_offset_s t in
+  let time =
+    if second = 0 then
+      Printf.sprintf "%d:%02d %s" (human_hour hour) minute (meridiem hour)
+    else
+      Printf.sprintf "%d:%02d:%02d %s" (human_hour hour) minute second
+        (meridiem hour)
+  in
+  Printf.sprintf "%s %d %s %d at %s %s" (month_name month) day
+    (weekday_name weekday) year time
+    (Timezone.to_string timezone)
+
+let string_of_time ?(timezone = Timezone.utc) ?(time_format = Rfc3339) t =
+  match time_format with
+  | Rfc3339 ->
+      Ptime.to_rfc3339 ~tz_offset_s:(Timezone.offset_seconds timezone) t
+  | Human -> human_time timezone t
 
 let warning_to_string = function
   | Analysis.NeverFires -> "never fires"
@@ -23,13 +71,15 @@ let pp_json ppf json =
   Format.pp_print_string ppf (Yojson.Safe.pretty_to_string json);
   Format.pp_print_newline ppf ()
 
-let pp_next ?(timezone = Timezone.utc) ppf ~format ~expr times =
+let pp_next ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
+    ~expr times =
   match format with
   | Plain ->
       Format.fprintf ppf "Next fire times for %s (%s):@." expr
         (Timezone.to_string timezone);
       List.iter
-        (fun t -> Format.fprintf ppf "%s@." (string_of_time ~timezone t))
+        (fun t ->
+          Format.fprintf ppf "%s@." (string_of_time ~timezone ~time_format t))
         times
   | Json ->
       `Assoc
@@ -59,7 +109,8 @@ let pp_warnings ppf ~format ~expr warnings =
         ]
       |> pp_json ppf
 
-let pp_conflicts ?(timezone = Timezone.utc) ppf ~format conflicts =
+let pp_conflicts ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
+    conflicts =
   match format with
   | Plain ->
       if conflicts = [] then Format.fprintf ppf "No conflicts found@."
@@ -67,7 +118,7 @@ let pp_conflicts ?(timezone = Timezone.utc) ppf ~format conflicts =
         List.iter
           (fun c ->
             Format.fprintf ppf "conflict at %s (delta %ds)@."
-              (string_of_time ~timezone c.Analysis.at)
+              (string_of_time ~timezone ~time_format c.Analysis.at)
               c.delta)
           conflicts
   | Json ->
@@ -88,7 +139,8 @@ let pp_conflicts ?(timezone = Timezone.utc) ppf ~format conflicts =
         ]
       |> pp_json ppf
 
-let pp_overlaps ?(timezone = Timezone.utc) ppf ~format overlaps =
+let pp_overlaps ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
+    overlaps =
   match format with
   | Plain ->
       if overlaps = [] then Format.fprintf ppf "No overlaps found@."
@@ -96,8 +148,8 @@ let pp_overlaps ?(timezone = Timezone.utc) ppf ~format overlaps =
         List.iter
           (fun o ->
             Format.fprintf ppf "started %s, next fire %s, overrun by %ds@."
-              (string_of_time ~timezone o.Analysis.started_at)
-              (string_of_time ~timezone o.next_fire)
+              (string_of_time ~timezone ~time_format o.Analysis.started_at)
+              (string_of_time ~timezone ~time_format o.next_fire)
               o.overrun_by)
           overlaps
   | Json ->
@@ -133,7 +185,7 @@ let job_json job =
         | None -> `Null );
     ]
 
-let pp_check_plain timezone ppf report =
+let pp_check_plain timezone time_format ppf report =
   if report.Check.jobs = [] then Format.fprintf ppf "No jobs found@.";
   List.iter
     (fun (job, warnings) ->
@@ -144,9 +196,9 @@ let pp_check_plain timezone ppf report =
             Format.fprintf ppf "- %s@." (warning_to_string warning))
           warnings))
     report.warnings;
-  pp_conflicts ~timezone ppf ~format:Plain report.conflicts;
+  pp_conflicts ~timezone ~time_format ppf ~format:Plain report.conflicts;
   if report.overlaps <> [] then
-    pp_overlaps ~timezone ppf ~format:Plain report.overlaps
+    pp_overlaps ~timezone ~time_format ppf ~format:Plain report.overlaps
 
 let pp_check_json timezone ppf (report : Check.report) =
   let warning_json (job, warnings) =
@@ -186,7 +238,7 @@ let pp_check_json timezone ppf (report : Check.report) =
     ]
   |> pp_json ppf
 
-let pp_check ~timezone ppf ~format report =
+let pp_check ~timezone ?(time_format = Rfc3339) ppf ~format report =
   match format with
-  | Plain -> pp_check_plain timezone ppf report
+  | Plain -> pp_check_plain timezone time_format ppf report
   | Json -> pp_check_json timezone ppf report

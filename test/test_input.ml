@@ -57,10 +57,22 @@ let test_system_crontab_macro () =
 let test_crontab_reboot_rejected () =
   let lines = [ "@reboot /usr/bin/startup" ] in
   match Crontab.parse_lines ~source_path:"crontab" lines with
-  | Error [ error ] -> Alcotest.(check int) "line" 1 error.Crontab.line
+  | Error [ error ] ->
+      Alcotest.(check (option int)) "line" (Some 1) error.Crontab.line
   | Error errors ->
       Alcotest.failf "expected one error, got %d" (List.length errors)
   | Ok _ -> Alcotest.fail "expected @reboot to be rejected"
+
+let test_crontab_missing_file () =
+  match Crontab.parse_file "/definitely/not/a/real/crontab" with
+  | Error [ error ] ->
+      Alcotest.(check (option int)) "line" None error.Crontab.line;
+      Alcotest.(check bool)
+        "message mentions path" true
+        (String.contains error.message '/')
+  | Error errors ->
+      Alcotest.failf "expected one error, got %d" (List.length errors)
+  | Ok _ -> Alcotest.fail "expected missing file to fail"
 
 let test_kubernetes_yaml () =
   let lines =
@@ -90,6 +102,16 @@ let test_kubernetes_yaml () =
       Alcotest.failf "unexpected k8s errors: %d" (List.length errors)
   | Ok jobs -> Alcotest.failf "expected one job, got %d" (List.length jobs)
 
+let test_kubernetes_missing_file () =
+  let path = "/definitely/not/a/real/cronjob.yaml" in
+  match Kubernetes.parse_file path with
+  | Error [ error ] ->
+      Alcotest.(check string) "file" path error.Kubernetes.file;
+      Alcotest.(check (option int)) "line" None error.line
+  | Error errors ->
+      Alcotest.failf "expected one error, got %d" (List.length errors)
+  | Ok _ -> Alcotest.fail "expected missing file to fail"
+
 let () =
   Alcotest.run "input"
     [
@@ -101,7 +123,11 @@ let () =
           Alcotest.test_case "system macro" `Quick test_system_crontab_macro;
           Alcotest.test_case "reboot rejected" `Quick
             test_crontab_reboot_rejected;
+          Alcotest.test_case "missing file" `Quick test_crontab_missing_file;
         ] );
       ( "kubernetes",
-        [ Alcotest.test_case "cronjob yaml" `Quick test_kubernetes_yaml ] );
+        [
+          Alcotest.test_case "cronjob yaml" `Quick test_kubernetes_yaml;
+          Alcotest.test_case "missing file" `Quick test_kubernetes_missing_file;
+        ] );
     ]

@@ -80,10 +80,15 @@ croncheck next "*/5 * * * *" --count 10
 
 ```sh
 croncheck next "*/5 * * * *" --count 10
+croncheck next "*/5 * * * *" --count 10 --time-format human
 croncheck warn "0 0 31 * *"
 croncheck conflicts "*/5 * * * *" "*/3 * * * *" --window 24h --threshold 0
 croncheck overlaps "* * * * *" --window 60m --duration 120
 ```
+
+Plain output uses RFC3339 timestamps by default. Use `--time-format human` for
+readable timestamps such as `April 22 Wed 2026 at 6:20 AM UTC`. JSON output
+always uses RFC3339.
 
 Analyze multiple schedules:
 

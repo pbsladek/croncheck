@@ -124,6 +124,13 @@ assert_stdout_contains "+02:00" "next named fields and timezone"
 assert_stderr_empty "next named fields and timezone"
 pass "next named fields and timezone"
 
+run_cmd 0 "next human time format" next "0 9 * JAN MON-FRI" --count 1 --tz +02:00 --time-format human
+assert_stdout_contains "Next fire times for 0 9 * JAN MON-FRI (+02:00):" "next human time format"
+assert_stdout_contains "January" "next human time format"
+assert_stdout_contains " at 9:00 AM +02:00" "next human time format"
+assert_stderr_empty "next human time format"
+pass "next human time format"
+
 run_cmd 0 "next quartz six fields" next "0 0 0 * * ?" --count 1
 assert_stdout_contains "Next fire times for 0 0 0 * * ? (UTC):" "next quartz six fields"
 assert_stderr_empty "next quartz six fields"
@@ -165,20 +172,61 @@ assert_stdout_empty "usage error"
 assert_stderr_contains "unsupported timezone" "usage error"
 pass "usage error"
 
+run_cmd 3 "unknown option suggestion" next "0 0 * * *" --time-fortmat human
+assert_stdout_empty "unknown option suggestion"
+assert_stderr_contains "did you mean '--time-format'" "unknown option suggestion"
+pass "unknown option suggestion"
+
 run_cmd 3 "invalid duration" conflicts "*/5 * * * *" "*/3 * * * *" --window 10x
 assert_stdout_empty "invalid duration"
-assert_stderr_contains "duration unit must be d, h, or m" "invalid duration"
+assert_stderr_contains "duration unit must be one of d, h, or m" "invalid duration"
 pass "invalid duration"
+
+run_cmd 3 "oversized duration" conflicts "*/5 * * * *" "*/3 * * * *" --window 999999999999999d
+assert_stdout_empty "oversized duration"
+assert_stderr_contains "duration is too large" "oversized duration"
+pass "oversized duration"
+
+run_cmd 3 "negative count" next "0 0 * * *" --count=-1
+assert_stdout_empty "negative count"
+assert_stderr_contains "count must be non-negative" "negative count"
+pass "negative count"
+
+run_cmd 3 "negative threshold" conflicts "*/5 * * * *" "*/3 * * * *" --threshold=-1
+assert_stdout_empty "negative threshold"
+assert_stderr_contains "threshold must be non-negative" "negative threshold"
+pass "negative threshold"
+
+run_cmd 3 "negative overlap duration" overlaps "* * * * *" --duration=-1
+assert_stdout_empty "negative overlap duration"
+assert_stderr_contains "duration must be non-negative" "negative overlap duration"
+pass "negative overlap duration"
 
 run_cmd 3 "invalid format" warn "0 0 * * *" --format xml
 assert_stdout_empty "invalid format"
-assert_stderr_contains "unknown format" "invalid format"
+assert_stderr_contains "expected output format" "invalid format"
 pass "invalid format"
+
+run_cmd 3 "invalid time format" next "0 0 * * *" --time-format kitchen
+assert_stdout_empty "invalid time format"
+assert_stderr_contains "expected time format" "invalid time format"
+pass "invalid time format"
+
+run_cmd 3 "json rejects human time format" next "0 0 * * *" --format json --time-format human
+assert_stdout_empty "json rejects human time format"
+assert_stderr_contains "--time-format only applies to plain output" "json rejects human time format"
+pass "json rejects human time format"
 
 run_cmd 1 "conflicts" conflicts "*/5 * * * *" "*/3 * * * *" --window 60m --threshold 0
 assert_stdout_contains "conflict at" "conflicts"
 assert_stderr_empty "conflicts"
 pass "conflicts"
+
+run_cmd 1 "conflicts human time format" conflicts "*/5 * * * *" "*/3 * * * *" --window 60m --threshold 0 --time-format human
+assert_stdout_contains "conflict at" "conflicts human time format"
+assert_stdout_contains " at " "conflicts human time format"
+assert_stderr_empty "conflicts human time format"
+pass "conflicts human time format"
 
 run_cmd 1 "conflicts option order json" conflicts --format json --threshold 0 "*/5 * * * *" --window 60m "*/3 * * * *"
 assert_stdout_contains '"conflicts"' "conflicts option order json"
@@ -190,6 +238,12 @@ run_cmd 1 "overlaps" overlaps "* * * * *" --window 5m --duration 120
 assert_stdout_contains "overrun by" "overlaps"
 assert_stderr_empty "overlaps"
 pass "overlaps"
+
+run_cmd 1 "overlaps human time format" overlaps "* * * * *" --window 5m --duration 120 --time-format human
+assert_stdout_contains "started" "overlaps human time format"
+assert_stdout_contains " at " "overlaps human time format"
+assert_stderr_empty "overlaps human time format"
+pass "overlaps human time format"
 
 run_cmd 0 "overlaps no findings json" overlaps "0 0 * * *" --duration 60 --window 60m --format json
 assert_stdout_contains '"overlaps": []' "overlaps no findings json"
@@ -211,6 +265,12 @@ assert_stdout_empty "check stdin parse error"
 assert_stderr_contains "stdin:1" "check stdin parse error"
 assert_stderr_contains "outside allowed range" "check stdin parse error"
 pass "check stdin parse error"
+
+run_cmd 2 "check missing crontab" check --from-crontab "$tmpdir/missing-crontab"
+assert_stdout_empty "check missing crontab"
+assert_stderr_contains "Error: failed to parse input" "check missing crontab"
+assert_stderr_contains "$tmpdir/missing-crontab" "check missing crontab"
+pass "check missing crontab"
 
 crontab=$tmpdir/crontab
 {
