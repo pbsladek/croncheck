@@ -21,9 +21,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      # actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - uses: ocaml/setup-ocaml@v3
+      # ocaml/setup-ocaml@v3
+      - uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014
         with:
           ocaml-compiler: "5.2"
 
@@ -69,7 +71,8 @@ jobs:
           shasum -a 256 "$artifact.tar.gz" > "$artifact.tar.gz.sha256"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        # actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: |
@@ -77,7 +80,8 @@ jobs:
             ${{ steps.artifact.outputs.name }}.tar.gz.sha256
 
       - name: Download artifact for smoke test
-        uses: actions/download-artifact@v8
+        # actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: downloaded
@@ -99,7 +103,8 @@ jobs:
 
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v8
+        # actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: croncheck-*
           path: dist
@@ -113,7 +118,8 @@ jobs:
           done
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+        # softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
           files: |
             dist/*.tar.gz

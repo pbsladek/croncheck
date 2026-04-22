@@ -18,9 +18,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      # actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - uses: ocaml/setup-ocaml@v3
+      # ocaml/setup-ocaml@v3
+      - uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
@@ -43,9 +45,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      # actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - uses: ocaml/setup-ocaml@v3
+      # ocaml/setup-ocaml@v3
+      - uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014
         with:
           ocaml-compiler: "5.2"
 
@@ -57,9 +61,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      # actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - uses: ocaml/setup-ocaml@v3
+      # ocaml/setup-ocaml@v3
+      - uses: ocaml/setup-ocaml@e32b06a3e831ff2fbc6f08cf35be2085e3918014
         with:
           ocaml-compiler: "5.2"
 
