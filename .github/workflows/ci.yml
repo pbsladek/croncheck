@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-test:
     name: Build and test
@@ -15,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ocaml/setup-ocaml@v3
         with:
@@ -35,12 +38,26 @@ jobs:
       - name: Integration test
         run: opam exec -- make integration-test
 
+  opam-lint:
+    name: Opam lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.2"
+
+      - name: Lint opam package
+        run: opam exec -- make opam-lint
+
   format:
     name: Format
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ocaml/setup-ocaml@v3
         with:

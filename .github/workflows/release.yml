@@ -8,13 +8,20 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  linux-binary:
-    name: Build Linux binary
-    runs-on: ubuntu-latest
+  build-artifacts:
+    name: Build ${{ matrix.os }} binary
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ocaml/setup-ocaml@v3
         with:
@@ -31,21 +38,84 @@ jobs:
           opam exec -- make test
           opam exec -- make integration-test
 
+      - name: Set artifact name
+        id: artifact
+        run: |
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m)"
+
+          case "$os" in
+            linux) os_name="linux" ;;
+            darwin) os_name="macos" ;;
+            *) echo "unsupported os: $os" >&2; exit 1 ;;
+          esac
+
+          case "$arch" in
+            x86_64|amd64) arch_name="x86_64" ;;
+            arm64|aarch64) arch_name="arm64" ;;
+            *) echo "unsupported arch: $arch" >&2; exit 1 ;;
+          esac
+
+          name="croncheck-${os_name}-${arch_name}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
       - name: Package binary
         run: |
+          artifact="${{ steps.artifact.outputs.name }}"
           mkdir -p dist
-          cp _build/default/bin/main.exe dist/croncheck-linux-x86_64
-          chmod +x dist/croncheck-linux-x86_64
-          tar -C dist -czf croncheck-linux-x86_64.tar.gz croncheck-linux-x86_64
+          cp _build/default/bin/main.exe "dist/$artifact"
+          chmod +x "dist/$artifact"
+          tar -C dist -czf "$artifact.tar.gz" "$artifact"
+          shasum -a 256 "$artifact.tar.gz" > "$artifact.tar.gz.sha256"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: croncheck-linux-x86_64
-          path: croncheck-linux-x86_64.tar.gz
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            ${{ steps.artifact.outputs.name }}.tar.gz
+            ${{ steps.artifact.outputs.name }}.tar.gz.sha256
+
+      - name: Download artifact for smoke test
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: downloaded
+
+      - name: Smoke test release artifact
+        run: |
+          artifact="${{ steps.artifact.outputs.name }}"
+          cd downloaded
+          shasum -a 256 -c "$artifact.tar.gz.sha256"
+          cd ..
+          mkdir -p smoke
+          tar -C smoke -xzf "downloaded/$artifact.tar.gz"
+          "smoke/$artifact" --help | grep -F "Static analysis"
+
+  publish:
+    name: Publish GitHub release
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: croncheck-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify checksums
+        run: |
+          cd dist
+          for checksum in *.sha256; do
+            shasum -a 256 -c "$checksum"
+          done
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          files: croncheck-linux-x86_64.tar.gz
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
           generate_release_notes: true

@@ -1,5 +1,8 @@
 # croncheck
 
+[![CI](https://github.com/pbsladek/croncheck/actions/workflows/ci.yml/badge.svg)](https://github.com/pbsladek/croncheck/actions/workflows/ci.yml)
+[![Release](https://github.com/pbsladek/croncheck/actions/workflows/release.yml/badge.svg)](https://github.com/pbsladek/croncheck/actions/workflows/release.yml)
+
 `croncheck` is a small offline CLI for static analysis of cron expressions.
 
 It can:
@@ -14,17 +17,51 @@ Times are UTC by default. Fixed offsets like `+02:00` are supported with `--tz`.
 
 ## Install
 
-From source:
+### From GitHub Releases
+
+Download the binary tarball and checksum for your platform from the latest
+release.
+
+Linux:
 
 ```sh
-opam install . --deps-only --with-test
-dune build
+curl -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-linux-x86_64.tar.gz
+curl -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-linux-x86_64.tar.gz.sha256
+sha256sum -c croncheck-linux-x86_64.tar.gz.sha256
+tar -xzf croncheck-linux-x86_64.tar.gz
+./croncheck-linux-x86_64 --help
+```
+
+Install it somewhere on your `PATH`:
+
+```sh
+install -m 0755 croncheck-linux-x86_64 /usr/local/bin/croncheck
+```
+
+macOS:
+
+```sh
+curl -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-macos-arm64.tar.gz
+curl -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-macos-arm64.tar.gz.sha256
+shasum -a 256 -c croncheck-macos-arm64.tar.gz.sha256
+tar -xzf croncheck-macos-arm64.tar.gz
+./croncheck-macos-arm64 --help
+install -m 0755 croncheck-macos-arm64 /usr/local/bin/croncheck
+```
+
+### From Source
+
+Install dependencies and build:
+
+```sh
+make deps
+make build
 ```
 
 Run without installing:
 
 ```sh
-dune exec croncheck -- next "*/5 * * * *" --count 10
+make run ARGS='next "*/5 * * * *" --count 10'
 ```
 
 Install into the active opam switch:
@@ -79,6 +116,7 @@ Supported syntax:
 ```sh
 dune build
 dune test
+opam lint croncheck.opam
 find lib bin test \( -name '*.ml' -o -name '*.mli' \) -print | xargs ocamlformat --check
 ```
 
@@ -92,3 +130,23 @@ make integration-test
 `make integration-test` runs the compiled CLI end to end, including exit codes,
 stdout/stderr behavior, JSON output, stdin input, crontab files, and Kubernetes
 CronJob YAML.
+
+## Release
+
+Releases are tag-driven. From a clean working tree:
+
+```sh
+make release VERSION=v0.1.0
+```
+
+That command runs the full local check, creates an annotated tag, and pushes it.
+The GitHub release workflow builds Linux and macOS binary tarballs, smoke-tests
+the downloaded artifacts, and publishes matching SHA-256 checksum files:
+
+```sh
+sha256sum -c croncheck-linux-x86_64.tar.gz.sha256
+shasum -a 256 -c croncheck-macos-arm64.tar.gz.sha256
+```
+
+GitHub Actions updates are tracked by Dependabot. SLSA/provenance metadata is
+not enabled yet.
