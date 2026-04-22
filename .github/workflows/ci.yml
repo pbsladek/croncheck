@@ -22,7 +22,9 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install dependencies
-        run: opam install --yes . --deps-only --with-test
+        run: |
+          opam pin add --yes --no-action croncheck .
+          opam install --yes --deps-only --with-test croncheck
 
       - name: Build
         run: opam exec -- make build

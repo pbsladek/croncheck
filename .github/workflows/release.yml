@@ -21,7 +21,9 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install dependencies
-        run: opam install --yes . --deps-only --with-test
+        run: |
+          opam pin add --yes --no-action croncheck .
+          opam install --yes --deps-only --with-test croncheck
 
       - name: Build and test
         run: |
