@@ -22,7 +22,9 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install dependencies
-        run: opam install --yes . --deps-only --with-test
+        run: |
+          opam install --yes dune
+          opam install --yes . --deps-only --with-test
 
       - name: Build
         run: opam exec -- make build
@@ -45,7 +47,7 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install formatter
-        run: opam install --yes ocamlformat.0.26.2
+        run: opam install --yes dune ocamlformat.0.26.2
 
       - name: Check formatting
         run: opam exec -- make fmt-check

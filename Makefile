@@ -29,7 +29,8 @@ clean:
 	$(DUNE) clean
 
 deps:
-	$(OPAM) install . --deps-only --with-test
+	$(OPAM) install --yes dune
+	$(OPAM) install --yes . --deps-only --with-test
 
 install:
 	$(OPAM) install .

@@ -21,7 +21,9 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install dependencies
-        run: opam install --yes . --deps-only --with-test
+        run: |
+          opam install --yes dune
+          opam install --yes . --deps-only --with-test
 
       - name: Build and test
         run: |
