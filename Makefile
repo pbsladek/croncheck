@@ -29,7 +29,7 @@ clean:
 	$(DUNE) clean
 
 deps:
-	$(OPAM) pin add --yes --no-action croncheck .
+	$(OPAM) pin add --yes --no-action --kind=path croncheck .
 	$(OPAM) install --yes --deps-only --with-test croncheck
 
 install:

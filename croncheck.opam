@@ -1,17 +1,19 @@
 opam-version: "2.0"
 synopsis: "Static analysis for cron expressions"
 description: "A standalone offline CLI for parsing and analyzing POSIX cron expressions."
-maintainer: "croncheck"
-authors: "croncheck"
+maintainer: "pbsladek"
+authors: "pbsladek"
 license: "MIT"
+homepage: "https://github.com/pbsladek/croncheck"
+bug-reports: "https://github.com/pbsladek/croncheck/issues"
+dev-repo: "git+https://github.com/pbsladek/croncheck.git"
 depends: [
   "ocaml" {>= "4.14"}
   "dune" {>= "3.0" & < "4.0"}
   "cmdliner" {>= "1.2.0" & < "2.0.0"}
   "ptime" {>= "1.1.0" & < "2.0.0"}
-  "ptime.clock.os" {>= "1.1.0" & < "2.0.0"}
   "fmt" {>= "0.9.0" & < "1.0.0"}
-  "alcotest" {>= "1.7.0" & < "2.0.0"} {with-test}
+  "alcotest" {with-test & >= "1.7.0" & < "2.0.0"}
   "yojson" {>= "2.1.0" & < "3.0.0"}
 ]
 build: [

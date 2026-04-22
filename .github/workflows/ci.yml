@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          opam pin add --yes --no-action croncheck .
+          opam pin add --yes --no-action --kind=path croncheck .
           opam install --yes --deps-only --with-test croncheck
 
       - name: Build
