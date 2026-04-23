@@ -6,22 +6,29 @@ let is_blank_or_comment line =
   let line = trim line in
   line = "" || String.starts_with ~prefix:"#" line
 
-let is_env_assignment line =
+let parse_env_assignment line =
   let line = trim line in
   match String.index_opt line '=' with
-  | None -> false
+  | None -> None
   | Some eq ->
       let name = String.sub line 0 eq |> trim in
+      let value =
+        String.sub line (eq + 1) (String.length line - eq - 1) |> trim
+      in
       let valid_name_char = function
         | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' -> true
         | _ -> false
       in
-      name <> ""
-      && (match name.[0] with
-         | 'A' .. 'Z' | 'a' .. 'z' | '_' -> true
-         | _ -> false)
-      && String.for_all valid_name_char name
+      if
+        name <> ""
+        && (match name.[0] with
+           | 'A' .. 'Z' | 'a' .. 'z' | '_' -> true
+           | _ -> false)
+        && String.for_all valid_name_char name
+      then Some (String.uppercase_ascii name, value)
+      else None
 
+let is_env_assignment line = parse_env_assignment line <> None
 let words line = Util.split_words (trim line)
 
 let take n xs =
@@ -31,7 +38,7 @@ let take n xs =
   in
   loop [] n xs
 
-let parse_line ~system ~source_path line_no line =
+let parse_line ~system ~source_path ~timezone line_no line =
   if is_blank_or_comment line || is_env_assignment line then Ok None
   else
     let parts = words line in
@@ -58,7 +65,7 @@ let parse_line ~system ~source_path line_no line =
             else
               let command = String.concat " " command_parts in
               match
-                Job.make ?id:user ~command ~line:line_no
+                Job.make ?id:user ?timezone ~command ~line:line_no
                   ~source:(CrontabFile source_path) expr_raw
               with
               | Ok job -> Ok (Some job)
@@ -90,7 +97,7 @@ let parse_line ~system ~source_path line_no line =
             else
               let command = String.concat " " command_parts in
               match
-                Job.make ?id:user ~command ~line:line_no
+                Job.make ?id:user ?timezone ~command ~line:line_no
                   ~source:(CrontabFile source_path) expr_raw
               with
               | Ok job -> Ok (Some job)
@@ -104,14 +111,22 @@ let parse_line ~system ~source_path line_no line =
 let parse_lines ?(system = false) ~source_path lines =
   let jobs, errors =
     lines
-    |> List.mapi (fun index line ->
-           parse_line ~system ~source_path (index + 1) line)
+    |> List.mapi (fun index line -> (index + 1, line))
     |> List.fold_left
-         (fun (jobs, errors) -> function
-           | Ok None -> (jobs, errors)
-           | Ok (Some job) -> (job :: jobs, errors)
-           | Error e -> (jobs, e :: errors))
-         ([], [])
+         (fun (timezone, jobs, errors) (line_no, line) ->
+           match parse_env_assignment line with
+           | Some ("CRON_TZ", raw) -> (
+               match Timezone.parse raw with
+               | Ok timezone -> (Some timezone, jobs, errors)
+               | Error message ->
+                   (timezone, jobs, { line = Some line_no; message } :: errors))
+           | _ -> (
+               match parse_line ~system ~source_path ~timezone line_no line with
+               | Ok None -> (timezone, jobs, errors)
+               | Ok (Some job) -> (timezone, job :: jobs, errors)
+               | Error e -> (timezone, jobs, e :: errors)))
+         (None, [], [])
+    |> fun (_, jobs, errors) -> (jobs, errors)
   in
   match errors with
   | [] -> Ok (List.rev jobs)

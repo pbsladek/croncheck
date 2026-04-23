@@ -31,6 +31,36 @@ let test_crontab_system () =
       Alcotest.failf "unexpected crontab errors: %d" (List.length errors)
   | Ok jobs -> Alcotest.failf "expected one job, got %d" (List.length jobs)
 
+let test_crontab_cron_tz () =
+  let lines =
+    [
+      "CRON_TZ=America/New_York";
+      "0 9 * * * /usr/bin/eastern";
+      "CRON_TZ=UTC";
+      "0 9 * * * /usr/bin/utc";
+    ]
+  in
+  match Crontab.parse_lines ~source_path:"crontab" lines with
+  | Ok [ eastern; utc ] ->
+      Alcotest.(check (option string))
+        "eastern timezone" (Some "America/New_York")
+        (Option.map Timezone.to_string eastern.timezone);
+      Alcotest.(check (option string))
+        "utc timezone" (Some "UTC")
+        (Option.map Timezone.to_string utc.timezone)
+  | Error errors ->
+      Alcotest.failf "unexpected crontab errors: %d" (List.length errors)
+  | Ok jobs -> Alcotest.failf "expected two jobs, got %d" (List.length jobs)
+
+let test_crontab_invalid_cron_tz () =
+  let lines = [ "CRON_TZ=No/Such_Zone"; "0 9 * * * /usr/bin/job" ] in
+  match Crontab.parse_lines ~source_path:"crontab" lines with
+  | Error [ error ] ->
+      Alcotest.(check (option int)) "line" (Some 1) error.Crontab.line
+  | Error errors ->
+      Alcotest.failf "expected one error, got %d" (List.length errors)
+  | Ok _ -> Alcotest.fail "expected invalid CRON_TZ to fail"
+
 let test_crontab_macro () =
   let lines = [ "@daily /usr/bin/daily-job" ] in
   match Crontab.parse_lines ~source_path:"crontab" lines with
@@ -102,6 +132,45 @@ let test_kubernetes_yaml () =
       Alcotest.failf "unexpected k8s errors: %d" (List.length errors)
   | Ok jobs -> Alcotest.failf "expected one job, got %d" (List.length jobs)
 
+let test_kubernetes_iana_timezone () =
+  let lines =
+    [
+      "apiVersion: batch/v1";
+      "kind: CronJob";
+      "metadata:";
+      "  name: report";
+      "spec:";
+      "  schedule: \"0 9 * * *\"";
+      "  timeZone: \"America/New_York\"";
+    ]
+  in
+  match Kubernetes.parse_lines ~source_path:"jobs.yaml" lines with
+  | Ok [ job ] ->
+      Alcotest.(check (option string))
+        "timezone" (Some "America/New_York")
+        (Option.map Timezone.to_string job.timezone)
+  | Error errors ->
+      Alcotest.failf "unexpected k8s errors: %d" (List.length errors)
+  | Ok jobs -> Alcotest.failf "expected one job, got %d" (List.length jobs)
+
+let test_kubernetes_rejects_embedded_timezone () =
+  let lines =
+    [
+      "apiVersion: batch/v1";
+      "kind: CronJob";
+      "metadata:";
+      "  name: bad";
+      "spec:";
+      "  schedule: \"CRON_TZ=America/New_York 0 9 * * *\"";
+    ]
+  in
+  match Kubernetes.parse_lines ~source_path:"jobs.yaml" lines with
+  | Error [ error ] ->
+      Alcotest.(check (option int)) "line" (Some 6) error.Kubernetes.line
+  | Error errors ->
+      Alcotest.failf "expected one error, got %d" (List.length errors)
+  | Ok _ -> Alcotest.fail "expected embedded CRON_TZ to fail"
+
 let test_kubernetes_missing_file () =
   let path = "/definitely/not/a/real/cronjob.yaml" in
   match Kubernetes.parse_file path with
@@ -119,6 +188,9 @@ let () =
         [
           Alcotest.test_case "user" `Quick test_crontab_user;
           Alcotest.test_case "system" `Quick test_crontab_system;
+          Alcotest.test_case "cron tz" `Quick test_crontab_cron_tz;
+          Alcotest.test_case "invalid cron tz" `Quick
+            test_crontab_invalid_cron_tz;
           Alcotest.test_case "macro" `Quick test_crontab_macro;
           Alcotest.test_case "system macro" `Quick test_system_crontab_macro;
           Alcotest.test_case "reboot rejected" `Quick
@@ -128,6 +200,10 @@ let () =
       ( "kubernetes",
         [
           Alcotest.test_case "cronjob yaml" `Quick test_kubernetes_yaml;
+          Alcotest.test_case "iana timezone" `Quick
+            test_kubernetes_iana_timezone;
+          Alcotest.test_case "reject embedded timezone" `Quick
+            test_kubernetes_rejects_embedded_timezone;
           Alcotest.test_case "missing file" `Quick test_kubernetes_missing_file;
         ] );
     ]

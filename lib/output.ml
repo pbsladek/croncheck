@@ -29,11 +29,10 @@ let human_hour hour = match hour mod 12 with 0 -> 12 | hour -> hour
 let meridiem hour = if hour < 12 then "AM" else "PM"
 
 let human_time timezone t =
-  let tz_offset_s = Timezone.offset_seconds timezone in
   let (year, month, day), ((hour, minute, second), _tz) =
-    Ptime.to_date_time ~tz_offset_s t
+    Timezone.local_date_time timezone t
   in
-  let weekday = Ptime.weekday ~tz_offset_s t in
+  let weekday = Timezone.weekday_of_date (year, month, day) in
   let time =
     if second = 0 then
       Printf.sprintf "%d:%02d %s" (human_hour hour) minute (meridiem hour)
@@ -48,7 +47,7 @@ let human_time timezone t =
 let string_of_time ?(timezone = Timezone.utc) ?(time_format = Rfc3339) t =
   match time_format with
   | Rfc3339 ->
-      Ptime.to_rfc3339 ~tz_offset_s:(Timezone.offset_seconds timezone) t
+      Ptime.to_rfc3339 ~tz_offset_s:(Timezone.offset_seconds_at timezone t) t
   | Human -> human_time timezone t
 
 let warning_to_string = function

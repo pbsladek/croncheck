@@ -124,6 +124,12 @@ assert_stdout_contains "+02:00" "next named fields and timezone"
 assert_stderr_empty "next named fields and timezone"
 pass "next named fields and timezone"
 
+run_cmd 0 "next iana timezone" next "0 9 * * *" --count 1 --tz America/New_York --time-format human
+assert_stdout_contains "Next fire times for 0 9 * * * (America/New_York):" "next iana timezone"
+assert_stdout_contains "America/New_York" "next iana timezone"
+assert_stderr_empty "next iana timezone"
+pass "next iana timezone"
+
 run_cmd 0 "next human time format" next "0 9 * JAN MON-FRI" --count 1 --tz +02:00 --time-format human
 assert_stdout_contains "Next fire times for 0 9 * JAN MON-FRI (+02:00):" "next human time format"
 assert_stdout_contains "January" "next human time format"
@@ -167,9 +173,9 @@ assert_stdout_empty "parse error"
 assert_stderr_contains "outside allowed range" "parse error"
 pass "parse error"
 
-run_cmd 3 "usage error" next "0 0 * * *" --tz America/Los_Angeles
+run_cmd 3 "usage error" next "0 0 * * *" --tz No/Such_Zone
 assert_stdout_empty "usage error"
-assert_stderr_contains "unsupported timezone" "usage error"
+assert_stderr_contains "unknown timezone" "usage error"
 pass "usage error"
 
 run_cmd 3 "unknown option suggestion" next "0 0 * * *" --time-fortmat human
@@ -275,14 +281,20 @@ pass "check missing crontab"
 crontab=$tmpdir/crontab
 {
   printf '%s\n' "SHELL = /bin/sh"
+  printf '%s\n' "CRON_TZ=America/New_York"
   printf '%s\n' "# comment"
   printf '%s\n' "0 0 31 * * root /usr/local/bin/monthly"
 } >"$crontab"
 run_cmd 1 "check system crontab" check --from-crontab "$crontab" --system-crontab --window 24h
-assert_stdout_contains "$crontab:3" "check system crontab"
+assert_stdout_contains "$crontab:4" "check system crontab"
 assert_stdout_contains "end-of-month trap" "check system crontab"
 assert_stderr_empty "check system crontab"
 pass "check system crontab"
+
+run_cmd 1 "check system crontab json timezone" check --from-crontab "$crontab" --system-crontab --window 24h --format json
+assert_stdout_contains '"timezone": "America/New_York"' "check system crontab json timezone"
+assert_stderr_empty "check system crontab json timezone"
+pass "check system crontab json timezone"
 
 k8s=$tmpdir/cronjob.yaml
 {
@@ -293,13 +305,29 @@ k8s=$tmpdir/cronjob.yaml
   printf '%s\n' "  namespace: default"
   printf '%s\n' "spec:"
   printf '%s\n' "  schedule: \"0 0 31 * *\""
+  printf '%s\n' "  timeZone: \"America/New_York\""
 } >"$k8s"
 run_cmd 1 "check kubernetes json" check --from-k8s "$k8s" --format json --window 24h
 assert_stdout_contains '"jobs"' "check kubernetes json"
 assert_stdout_contains "default/monthly31" "check kubernetes json"
+assert_stdout_contains '"timezone": "America/New_York"' "check kubernetes json"
 assert_stdout_contains "end-of-month trap" "check kubernetes json"
 assert_stderr_empty "check kubernetes json"
 pass "check kubernetes json"
+
+bad_k8s=$tmpdir/bad-cronjob.yaml
+{
+  printf '%s\n' "apiVersion: batch/v1"
+  printf '%s\n' "kind: CronJob"
+  printf '%s\n' "metadata:"
+  printf '%s\n' "  name: bad"
+  printf '%s\n' "spec:"
+  printf '%s\n' "  schedule: \"TZ=America/New_York 0 9 * * *\""
+} >"$bad_k8s"
+run_cmd 2 "check kubernetes rejects embedded timezone" check --from-k8s "$bad_k8s"
+assert_stdout_empty "check kubernetes rejects embedded timezone"
+assert_stderr_contains "use spec.timeZone instead" "check kubernetes rejects embedded timezone"
+pass "check kubernetes rejects embedded timezone"
 
 run_cmd 3 "check conflicting input sources" check --from-crontab "$crontab" --from-k8s "$k8s"
 assert_stdout_empty "check conflicting input sources"

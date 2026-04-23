@@ -5,7 +5,7 @@ type doc = {
   name : string option;
   namespace : string option;
   schedule : (string * int) option;
-  timezone : string option;
+  timezone : (string * int) option;
 }
 
 type doc_result = Ignored | Job of Job.t | Doc_error of error
@@ -87,7 +87,7 @@ let parse_doc lines =
             | `Spec, Some ("schedule", value) ->
                 { doc with schedule = Some (value, line_no) }
             | `Spec, Some ("timeZone", value) ->
-                { doc with timezone = Some value }
+                { doc with timezone = Some (value, line_no) }
             | _ -> doc
           in
           loop section doc rest
@@ -106,35 +106,57 @@ let job_of_doc source_path doc =
               message = "CronJob is missing spec.schedule";
             }
       | Some (schedule, line) -> (
+          let schedule_words = Util.split_words schedule in
           let result =
             let timezone =
               match doc.timezone with
               | None -> Ok None
-              | Some raw ->
+              | Some (raw, timezone_line) ->
                   Timezone.parse raw
                   |> Result.map (fun tz -> Some tz)
                   |> Result.map_error (fun message ->
-                         { file = source_path; line = Some line; message })
+                         {
+                           file = source_path;
+                           line = Some timezone_line;
+                           message;
+                         })
             in
             Result.bind timezone (fun timezone ->
-                let id =
-                  match (doc.namespace, doc.name) with
-                  | Some ns, Some name -> Some (ns ^ "/" ^ name)
-                  | None, Some name -> Some name
-                  | _ -> None
-                in
-                match
-                  Job.make ?id ?timezone ~line
-                    ~source:(KubernetesYaml source_path) schedule
-                with
-                | Ok job -> Ok job
-                | Error e ->
-                    Error
-                      {
-                        file = source_path;
-                        line = Some line;
-                        message = Cron.parse_error_to_string e;
-                      })
+                if
+                  List.exists
+                    (fun word ->
+                      let word = String.uppercase_ascii word in
+                      String.starts_with ~prefix:"TZ=" word
+                      || String.starts_with ~prefix:"CRON_TZ=" word)
+                    schedule_words
+                then
+                  Error
+                    {
+                      file = source_path;
+                      line = Some line;
+                      message =
+                        "Kubernetes CronJob schedules must not contain TZ= or \
+                         CRON_TZ=; use spec.timeZone instead";
+                    }
+                else
+                  let id =
+                    match (doc.namespace, doc.name) with
+                    | Some ns, Some name -> Some (ns ^ "/" ^ name)
+                    | None, Some name -> Some name
+                    | _ -> None
+                  in
+                  match
+                    Job.make ?id ?timezone ~line
+                      ~source:(KubernetesYaml source_path) schedule
+                  with
+                  | Ok job -> Ok job
+                  | Error e ->
+                      Error
+                        {
+                          file = source_path;
+                          line = Some line;
+                          message = Cron.parse_error_to_string e;
+                        })
           in
           match result with Ok job -> Job job | Error error -> Doc_error error))
   | _ -> Ignored

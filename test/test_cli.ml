@@ -19,7 +19,7 @@ let test_parse_error_exit () =
 let test_usage_error_exit () =
   Alcotest.(check int)
     "exit code" 3
-    (run [ "next"; "0 0 * * *"; "--tz"; "America/Los_Angeles" ])
+    (run [ "next"; "0 0 * * *"; "--tz"; "No/Such_Zone" ])
 
 let test_macro_cli () =
   Alcotest.(check int) "exit code" 0 (run [ "next"; "@daily"; "--count"; "1" ])

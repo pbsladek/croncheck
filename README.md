@@ -13,7 +13,8 @@ It can:
 - find self-overlaps for long-running jobs
 - read schedules from stdin, crontab files, or Kubernetes CronJob YAML
 
-Times are UTC by default. Fixed offsets like `+02:00` are supported with `--tz`.
+Times are UTC by default. Fixed offsets like `+02:00` and IANA timezone names
+like `America/New_York` are supported with `--tz`.
 
 ## Install
 
@@ -81,6 +82,7 @@ croncheck next "*/5 * * * *" --count 10
 ```sh
 croncheck next "*/5 * * * *" --count 10
 croncheck next "*/5 * * * *" --count 10 --time-format human
+croncheck next "0 9 * * *" --tz America/New_York --time-format human
 croncheck warn "0 0 31 * *"
 croncheck conflicts "*/5 * * * *" "*/3 * * * *" --window 24h --threshold 0
 croncheck overlaps "* * * * *" --window 60m --duration 120
@@ -89,6 +91,14 @@ croncheck overlaps "* * * * *" --window 60m --duration 120
 Plain output uses RFC3339 timestamps by default. Use `--time-format human` for
 readable timestamps such as `April 22 Wed 2026 at 6:20 AM UTC`. JSON output
 always uses RFC3339.
+
+Timezone support:
+
+- CLI `--tz` accepts `UTC`, `Z`, fixed offsets, and IANA names.
+- Crontab files support `CRON_TZ=America/New_York` for following jobs.
+- Kubernetes CronJob YAML honors `.spec.timeZone`.
+- DST spring-forward gaps are skipped.
+- DST fall-back folds fire once for each real instant.
 
 Analyze multiple schedules:
 

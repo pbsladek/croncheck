@@ -188,7 +188,9 @@ let check_cmd =
           value
           & opt timezone_conv Croncheck_lib.Timezone.utc
           & info [ "tz" ]
-              ~doc:"Default timezone: UTC, Z, or fixed offset such as +02:00.")
+              ~doc:
+                "Default timezone: UTC, Z, fixed offset such as +02:00, or \
+                 IANA name such as America/New_York.")
       $ Arg.(
           value
           & opt duration_conv (24 * 60 * 60)
@@ -250,7 +252,9 @@ let next_cmd =
           value
           & opt timezone_conv Croncheck_lib.Timezone.utc
           & info [ "tz" ]
-              ~doc:"Timezone: UTC, Z, or fixed offset such as +02:00.")
+              ~doc:
+                "Timezone: UTC, Z, fixed offset such as +02:00, or IANA name \
+                 such as America/New_York.")
       $ Arg.(
           value & opt count_conv 10
           & info [ "count"; "n" ] ~doc:"Number of fire times to print.")
@@ -281,7 +285,9 @@ let warn_cmd =
           value
           & opt timezone_conv Croncheck_lib.Timezone.utc
           & info [ "tz" ]
-              ~doc:"Timezone: UTC, Z, or fixed offset such as +02:00.")
+              ~doc:
+                "Timezone: UTC, Z, fixed offset such as +02:00, or IANA name \
+                 such as America/New_York.")
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
   Cmd.v (Cmd.info "warn" ~doc:"Report surprising cron semantics.") term
@@ -329,7 +335,9 @@ let conflicts_cmd =
           value
           & opt timezone_conv Croncheck_lib.Timezone.utc
           & info [ "tz" ]
-              ~doc:"Timezone: UTC, Z, or fixed offset such as +02:00.")
+              ~doc:
+                "Timezone: UTC, Z, fixed offset such as +02:00, or IANA name \
+                 such as America/New_York.")
       $ Arg.(
           value
           & opt duration_conv (24 * 60 * 60)
@@ -378,7 +386,9 @@ let overlaps_cmd =
           value
           & opt timezone_conv Croncheck_lib.Timezone.utc
           & info [ "tz" ]
-              ~doc:"Timezone: UTC, Z, or fixed offset such as +02:00.")
+              ~doc:
+                "Timezone: UTC, Z, fixed offset such as +02:00, or IANA name \
+                 such as America/New_York.")
       $ Arg.(
           value
           & opt duration_conv (24 * 60 * 60)

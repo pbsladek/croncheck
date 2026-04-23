@@ -59,6 +59,48 @@ let test_timezone_offset () =
     [ time 2024 1 1 7 0 ]
     times
 
+let iana name =
+  match Timezone.parse name with
+  | Ok timezone -> timezone
+  | Error msg -> Alcotest.fail msg
+
+let test_iana_timezone_spring_forward_gap () =
+  let times =
+    Schedule.next_n ~timezone:(iana "America/New_York") (expr "0 2 * * *")
+      ~from:(time 2024 3 9 0 0) 3
+  in
+  Alcotest.(check (list ptime))
+    "skip nonexistent 02:00"
+    [ time 2024 3 9 7 0; time 2024 3 11 6 0; time 2024 3 12 6 0 ]
+    times
+
+let test_iana_timezone_fall_back_fold () =
+  let times =
+    Schedule.next_n ~timezone:(iana "America/New_York") (expr "30 1 3 11 *")
+      ~from:(time 2024 11 3 4 0) 2
+  in
+  Alcotest.(check (list ptime))
+    "ambiguous 01:30 fires twice"
+    [ time 2024 11 3 5 30; time 2024 11 3 6 30 ]
+    times
+
+let test_iana_timezone_future_dst_rules () =
+  let timezone = iana "America/New_York" in
+  let summer =
+    Schedule.next_n ~timezone (expr "0 9 * * *") ~from:(time 2040 7 1 0 0) 1
+  in
+  let winter =
+    Schedule.next_n ~timezone (expr "0 9 * * *") ~from:(time 2040 1 1 0 0) 1
+  in
+  Alcotest.(check (list ptime))
+    "future summer daylight time"
+    [ time 2040 7 1 13 0 ]
+    summer;
+  Alcotest.(check (list ptime))
+    "future winter standard time"
+    [ time 2040 1 1 14 0 ]
+    winter
+
 let test_quartz_seconds () =
   let times =
     Schedule.next_n (expr "30 0 9 ? * 1 2024") ~from:(time 2024 1 1 8 59) 1
@@ -114,6 +156,12 @@ let () =
           Alcotest.test_case "quartz seconds" `Quick test_quartz_seconds;
           Alcotest.test_case "quartz past year stops" `Quick
             test_quartz_past_year_stops;
+          Alcotest.test_case "iana spring forward gap" `Quick
+            test_iana_timezone_spring_forward_gap;
+          Alcotest.test_case "iana fall back fold" `Quick
+            test_iana_timezone_fall_back_fold;
+          Alcotest.test_case "iana future dst rules" `Quick
+            test_iana_timezone_future_dst_rules;
           Alcotest.test_case "names" `Quick test_names_schedule;
           Alcotest.test_case "named steps" `Quick test_named_step_schedule;
           Alcotest.test_case "macros" `Quick test_macro_schedule;

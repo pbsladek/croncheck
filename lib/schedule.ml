@@ -26,13 +26,11 @@ let weekday_to_cron = function
   | `Fri -> 5
   | `Sat -> 6
 
-let tz_offset timezone = Timezone.offset_seconds timezone
-
-let date_time timezone t =
-  Ptime.to_date_time ~tz_offset_s:(tz_offset timezone) t
+let date_time timezone t = Timezone.local_date_time timezone t
 
 let dow timezone t =
-  weekday_to_cron (Ptime.weekday ~tz_offset_s:(tz_offset timezone) t)
+  let date, _ = date_time timezone t in
+  weekday_to_cron (Timezone.weekday_of_date date)
 
 let make_set ?(normalize = Fun.id) ~min ~max values =
   let set = Array.make (max - min + 1) false in
@@ -90,13 +88,15 @@ let possible compiled =
         (fun m ->
           List.exists
             (fun d ->
-              match
-                Ptime.of_date_time
-                  ((y, m, d), ((0, 0, 0), tz_offset compiled.timezone))
-              with
-              | None -> false
-              | Some t ->
-                  day_matches compiled ~dom:d ~dow:(dow compiled.timezone t))
+              let date = (y, m, d) in
+              if
+                Timezone.instants_of_local_date_time compiled.timezone
+                  (date, ((0, 0, 0), 0))
+                = []
+              then false
+              else
+                day_matches compiled ~dom:d
+                  ~dow:(weekday_to_cron (Timezone.weekday_of_date date)))
             days)
         compiled.months.members)
     years
@@ -181,15 +181,18 @@ let next_minute_after timezone t =
   | None -> None
   | Some bumped ->
       let date, ((hour, minute, _), _) = date_time timezone bumped in
-      Ptime.of_date_time (date, ((hour, minute, 0), tz_offset timezone))
+      Timezone.instants_of_local_date_time timezone
+        (date, ((hour, minute, 0), 0))
+      |> List.find_opt (fun candidate -> Ptime.compare candidate t > 0)
 
 let minute_start timezone t =
   let date, ((hour, minute, _), _) = date_time timezone t in
-  Ptime.of_date_time (date, ((hour, minute, 0), tz_offset timezone))
+  Timezone.instants_of_local_date_time timezone (date, ((hour, minute, 0), 0))
+  |> List.find_opt (fun candidate -> Ptime.compare candidate t <= 0)
 
 let time_in_minute timezone minute second =
   let date, ((hour, min, _), _) = date_time timezone minute in
-  Ptime.of_date_time (date, ((hour, min, second), tz_offset timezone))
+  Timezone.instants_of_local_date_time timezone (date, ((hour, min, second), 0))
 
 let minute_matches compiled t =
   let (year, month, dom), ((hour, minute, _), _tz) =
@@ -230,7 +233,7 @@ let fire_times_compiled compiled ~from =
         in
         let candidates_after cursor minute =
           seconds.members
-          |> List.filter_map (time_in_minute compiled.timezone minute)
+          |> List.concat_map (time_in_minute compiled.timezone minute)
           |> List.filter (fun t -> Ptime.compare t cursor > 0)
         in
         let rec loop cursor pending () =
