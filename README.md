@@ -7,7 +7,8 @@
 
 It can:
 
-- print upcoming fire times
+- explain a cron expression in plain English
+- print upcoming fire times, optionally with gap statistics
 - warn about surprising schedules
 - find conflicts between schedules
 - find self-overlaps for long-running jobs
@@ -80,9 +81,15 @@ croncheck next "*/5 * * * *" --count 10
 ## Usage
 
 ```sh
+croncheck explain "0 9 * * 1-5"
+# at 9:00 AM on Monday through Friday
+
 croncheck next "*/5 * * * *" --count 10
 croncheck next "*/5 * * * *" --count 10 --time-format human
 croncheck next "0 9 * * *" --tz America/New_York --time-format human
+croncheck next "*/30 * * * *" --count 6 --gaps   # show min/max/avg interval
+croncheck next "0 0 * * *" --from 2024-01-01      # pin start time
+
 croncheck warn "0 0 31 * *"
 croncheck conflicts "*/5 * * * *" "*/3 * * * *" --window 24h --threshold 0
 croncheck overlaps "* * * * *" --window 60m --duration 120
@@ -91,6 +98,9 @@ croncheck overlaps "* * * * *" --window 60m --duration 120
 Plain output uses RFC3339 timestamps by default. Use `--time-format human` for
 readable timestamps such as `April 22 Wed 2026 at 6:20 AM UTC`. JSON output
 always uses RFC3339.
+
+Use `--from` (RFC3339 or `YYYY-MM-DD`) on `next`, `conflicts`, `overlaps`, and
+`check` to pin the analysis start time instead of using the current clock.
 
 Timezone support:
 
@@ -142,9 +152,9 @@ make check
 make integration-test
 ```
 
-`make integration-test` runs the compiled CLI end to end, including exit codes,
-stdout/stderr behavior, JSON output, stdin input, crontab files, and Kubernetes
-CronJob YAML.
+`make integration-test` runs dune cram tests (`test/integration/e2e.t`) against
+the compiled CLI, covering exit codes, stdout/stderr behavior, JSON output,
+stdin input, crontab files, and Kubernetes CronJob YAML.
 
 ## Release
 

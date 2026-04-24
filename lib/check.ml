@@ -11,25 +11,22 @@ type report = {
 }
 
 let parse_stdin lines =
-  let jobs, errors =
-    lines
-    |> List.mapi (fun index line ->
-           let line_no = index + 1 in
-           let line = String.trim line in
-           if line = "" || String.starts_with ~prefix:"#" line then `Skip
-           else
-             match Job.make ~line:line_no ~source:Stdin line with
-             | Ok job -> `Job job
-             | Error e ->
-                 `Error
-                   (Printf.sprintf "stdin:%d: %s" line_no
-                      (Cron.parse_error_to_string e)))
-    |> List.fold_left
-         (fun (jobs, errors) -> function
-           | `Skip -> (jobs, errors)
-           | `Job job -> (job :: jobs, errors)
-           | `Error e -> (jobs, e :: errors))
-         ([], [])
+  let _, jobs, errors =
+    List.fold_left
+      (fun (line_no, jobs, errors) raw ->
+        let line = String.trim raw in
+        if line = "" || String.starts_with ~prefix:"#" line then
+          (line_no + 1, jobs, errors)
+        else
+          match Job.make ~line:line_no ~source:Stdin line with
+          | Ok job -> (line_no + 1, job :: jobs, errors)
+          | Error e ->
+              let msg =
+                Printf.sprintf "stdin:%d: %s" line_no
+                  (Cron.parse_error_to_string e)
+              in
+              (line_no + 1, jobs, msg :: errors))
+      (1, [], []) lines
   in
   match errors with
   | [] -> Ok (List.rev jobs)
@@ -42,8 +39,8 @@ let load = function
       | Ok jobs -> Ok jobs
       | Error errors ->
           errors
-          |> List.map (fun e ->
-                 match e.Crontab.line with
+          |> List.map (fun (e : Crontab.error) ->
+                 match e.line with
                  | Some line -> Printf.sprintf "%s:%d: %s" path line e.message
                  | None -> Printf.sprintf "%s: %s" path e.message)
           |> Result.error)
@@ -52,8 +49,8 @@ let load = function
       | Ok jobs -> Ok jobs
       | Error errors ->
           errors
-          |> List.map (fun e ->
-                 match e.Kubernetes.line with
+          |> List.map (fun (e : Kubernetes.error) ->
+                 match e.line with
                  | Some line -> Printf.sprintf "%s:%d: %s" e.file line e.message
                  | None -> Printf.sprintf "%s: %s" e.file e.message)
           |> Result.error)

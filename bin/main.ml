@@ -6,17 +6,17 @@ let parse_expr raw =
   | Error e -> Error (`Msg (Croncheck_lib.Cron.parse_error_to_string e))
 
 let print_error ?hint message =
-  Printf.eprintf "Error: %s\n" message;
-  Option.iter (Printf.eprintf "Hint: %s\n") hint
+  Format.eprintf "Error: %s@." message;
+  Option.iter (fun h -> Format.eprintf "Hint: %s@." h) hint
 
 let print_parse_error ~expr reason =
-  Printf.eprintf "Error: invalid cron expression\n";
-  Printf.eprintf "  expression: %s\n" expr;
-  Printf.eprintf "  reason: %s\n" reason
+  Format.eprintf "Error: invalid cron expression@.";
+  Format.eprintf "  expression: %s@." expr;
+  Format.eprintf "  reason: %s@." reason
 
 let print_input_errors errors =
-  Printf.eprintf "Error: failed to parse input\n";
-  List.iter (Printf.eprintf "  - %s\n") errors
+  Format.eprintf "Error: failed to parse input@.";
+  List.iter (fun e -> Format.eprintf "  - %s@." e) errors
 
 let format_conv =
   let parse = function
@@ -114,6 +114,37 @@ let run_with_time_format format time_format f =
       3
   | Ok () -> f ()
 
+let ptime_conv =
+  let parse s =
+    match Ptime.of_rfc3339 s with
+    | Ok (t, _, _) -> Ok t
+    | Error _ -> (
+        match String.split_on_char '-' s with
+        | [ y; m; d ] -> (
+            match
+              (int_of_string_opt y, int_of_string_opt m, int_of_string_opt d)
+            with
+            | Some y, Some m, Some d -> (
+                match Ptime.of_date_time ((y, m, d), ((0, 0, 0), 0)) with
+                | Some t -> Ok t
+                | None -> Error (`Msg (Printf.sprintf "invalid date %S" s)))
+            | _ -> Error (`Msg (Printf.sprintf "invalid date %S" s)))
+        | _ ->
+            Error
+              (`Msg
+                (Printf.sprintf
+                   "expected RFC3339 timestamp or YYYY-MM-DD date, got %S" s)))
+  in
+  let print ppf t = Format.pp_print_string ppf (Ptime.to_rfc3339 t) in
+  Arg.conv (parse, print)
+
+let from_arg =
+  Arg.(
+    value
+    & opt (some ptime_conv) None
+    & info [ "from" ]
+        ~doc:"Start time as RFC3339 or YYYY-MM-DD; defaults to now.")
+
 let now () = Ptime_clock.now ()
 
 let add_seconds t seconds =
@@ -133,7 +164,7 @@ let read_stdin_lines () =
 
 let check_cmd =
   let run format time_format timezone window threshold duration from_crontab
-      system_crontab from_k8s =
+      system_crontab from_k8s from_opt =
     run_with_time_format format time_format (fun () ->
         let selected =
           List.filter_map Fun.id
@@ -162,7 +193,7 @@ let check_cmd =
               print_input_errors errors;
               2
           | Ok jobs ->
-              let from = now () in
+              let from = Option.value from_opt ~default:(now ()) in
               let until = add_seconds from window in
               let report =
                 Croncheck_lib.Check.analyze ~timezone ~from ~until ~threshold
@@ -214,7 +245,8 @@ let check_cmd =
       $ Arg.(
           value
           & opt (some string) None
-          & info [ "from-k8s" ] ~doc:"Read jobs from Kubernetes CronJob YAML."))
+          & info [ "from-k8s" ] ~doc:"Read jobs from Kubernetes CronJob YAML.")
+      $ from_arg)
   in
   Cmd.v
     (Cmd.info "check"
@@ -222,18 +254,19 @@ let check_cmd =
     term
 
 let next_cmd =
-  let run format time_format timezone count raw =
+  let run format time_format timezone count gaps from_opt raw =
     run_with_time_format format time_format (fun () ->
         match parse_expr raw with
         | Error (`Msg msg) ->
             print_parse_error ~expr:raw msg;
             2
         | Ok expr ->
+            let from = Option.value from_opt ~default:(now ()) in
             let times =
-              Croncheck_lib.Schedule.next_n ~timezone expr ~from:(now ()) count
+              Croncheck_lib.Schedule.next_n ~timezone expr ~from count
             in
-            Croncheck_lib.Output.pp_next ~timezone Format.std_formatter ~format
-              ~time_format ~expr:raw times;
+            Croncheck_lib.Output.pp_next ~timezone ~gaps Format.std_formatter
+              ~format ~time_format ~expr:raw times;
             0)
   in
   let term =
@@ -258,6 +291,10 @@ let next_cmd =
       $ Arg.(
           value & opt count_conv 10
           & info [ "count"; "n" ] ~doc:"Number of fire times to print.")
+      $ Arg.(
+          value & flag
+          & info [ "gaps" ] ~doc:"Show min/max/avg gap between fire times.")
+      $ from_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
   Cmd.v (Cmd.info "next" ~doc:"List next fire times.") term
@@ -293,7 +330,7 @@ let warn_cmd =
   Cmd.v (Cmd.info "warn" ~doc:"Report surprising cron semantics.") term
 
 let conflicts_cmd =
-  let run format time_format timezone window threshold raw_a raw_b =
+  let run format time_format timezone window threshold from_opt raw_a raw_b =
     run_with_time_format format time_format (fun () ->
         match (parse_expr raw_a, parse_expr raw_b) with
         | Error (`Msg msg), _ ->
@@ -303,7 +340,7 @@ let conflicts_cmd =
             print_parse_error ~expr:raw_b msg;
             2
         | Ok expr_a, Ok expr_b ->
-            let from = now () in
+            let from = Option.value from_opt ~default:(now ()) in
             let until = add_seconds from window in
             let conflicts =
               Croncheck_lib.Analysis.conflicts_with_timezone ~timezone ~expr_a
@@ -345,6 +382,7 @@ let conflicts_cmd =
       $ Arg.(
           value & opt threshold_conv 0
           & info [ "threshold" ] ~doc:"Conflict threshold in seconds.")
+      $ from_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR")
       $ Arg.(required & pos 1 (some string) None & info [] ~docv:"EXPR"))
   in
@@ -353,14 +391,14 @@ let conflicts_cmd =
     term
 
 let overlaps_cmd =
-  let run format time_format timezone window duration raw =
+  let run format time_format timezone window duration from_opt raw =
     run_with_time_format format time_format (fun () ->
         match parse_expr raw with
         | Error (`Msg msg) ->
             print_parse_error ~expr:raw msg;
             2
         | Ok expr ->
-            let from = now () in
+            let from = Option.value from_opt ~default:(now ()) in
             let until = add_seconds from window in
             let overlaps =
               Croncheck_lib.Analysis.overlaps ~timezone expr ~from ~until
@@ -397,10 +435,36 @@ let overlaps_cmd =
           value
           & opt seconds_duration_conv 60
           & info [ "duration" ] ~doc:"Assumed job duration in seconds.")
+      $ from_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
   Cmd.v
     (Cmd.info "overlaps" ~doc:"Find self-overlaps for a long-running job.")
+    term
+
+let explain_cmd =
+  let run format raw =
+    match parse_expr raw with
+    | Error (`Msg msg) ->
+        print_parse_error ~expr:raw msg;
+        2
+    | Ok expr ->
+        let description = Croncheck_lib.Explain.describe expr in
+        Croncheck_lib.Output.pp_explain Format.std_formatter ~format ~expr:raw
+          description;
+        0
+  in
+  let term =
+    Term.(
+      const run
+      $ Arg.(
+          value
+          & opt format_conv Croncheck_lib.Output.Plain
+          & info [ "format" ] ~doc:"Output format: plain or json.")
+      $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
+  in
+  Cmd.v
+    (Cmd.info "explain" ~doc:"Describe a cron expression in plain English.")
     term
 
 let () =
@@ -410,7 +474,9 @@ let () =
   in
   let cmd =
     Cmd.group info
-      [ next_cmd; warn_cmd; conflicts_cmd; overlaps_cmd; check_cmd ]
+      [
+        next_cmd; warn_cmd; conflicts_cmd; overlaps_cmd; check_cmd; explain_cmd;
+      ]
   in
   let code =
     match Cmd.eval_value cmd with

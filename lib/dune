@@ -1,3 +1,4 @@
 (library
  (name croncheck_lib)
- (libraries ptime fmt yojson))
+ (libraries ptime fmt yojson)
+ (instrumentation (backend bisect_ppx)))

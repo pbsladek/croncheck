@@ -60,24 +60,17 @@ let warn ?(timezone = Timezone.utc) ?(from = default_from) expr =
   in
   let year_count = count_in_window_until ~limit:12 compiled ~from one_year in
   let per_hour = fires_per_hour expr in
-  []
-  |> (fun warnings ->
-       if four_year_count = 0 then NeverFires :: warnings else warnings)
-  |> (fun warnings ->
-       if four_year_count > 0 && year_count < 12 then
-         RarelyFires { times_per_year = year_count } :: warnings
-       else warnings)
-  |> (fun warnings ->
-       if has_posix_dom_dow_ambiguity expr then DomDowAmbiguity :: warnings
-       else warnings)
-  |> (fun warnings ->
-       if per_hour > 30 then HighFrequency { per_hour } :: warnings
-       else warnings)
-  |> (fun warnings ->
-       if contains_only_gt_28 expr then EndOfMonthTrap :: warnings else warnings)
-  |> (fun warnings ->
-       if includes_feb_29 expr then LeapYearOnly :: warnings else warnings)
-  |> List.rev
+  [
+    (if four_year_count = 0 then Some NeverFires else None);
+    (if four_year_count > 0 && year_count < 12 then
+       Some (RarelyFires { times_per_year = year_count })
+     else None);
+    (if has_posix_dom_dow_ambiguity expr then Some DomDowAmbiguity else None);
+    (if per_hour > 30 then Some (HighFrequency { per_hour }) else None);
+    (if contains_only_gt_28 expr then Some EndOfMonthTrap else None);
+    (if includes_feb_29 expr then Some LeapYearOnly else None);
+  ]
+  |> List.filter_map Fun.id
 
 let conflicts_with_timezone ~timezone ~expr_a ~expr_b ~from ~until ~threshold =
   let a = Schedule.fire_times ~timezone expr_a ~from in

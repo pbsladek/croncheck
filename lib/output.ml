@@ -1,20 +1,7 @@
 type format = Plain | Json
 type time_format = Rfc3339 | Human
 
-let month_name = function
-  | 1 -> "January"
-  | 2 -> "February"
-  | 3 -> "March"
-  | 4 -> "April"
-  | 5 -> "May"
-  | 6 -> "June"
-  | 7 -> "July"
-  | 8 -> "August"
-  | 9 -> "September"
-  | 10 -> "October"
-  | 11 -> "November"
-  | 12 -> "December"
-  | _ -> invalid_arg "invalid month"
+let month_name = Util.month_name
 
 let weekday_name = function
   | `Mon -> "Mon"
@@ -70,8 +57,42 @@ let pp_json ppf json =
   Format.pp_print_string ppf (Yojson.Safe.pretty_to_string json);
   Format.pp_print_newline ppf ()
 
-let pp_next ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
-    ~expr times =
+type gap_stats = { count : int; min_s : int; max_s : int; avg_s : int }
+
+let compute_gaps times =
+  let rec diffs = function
+    | [] | [ _ ] -> []
+    | a :: (b :: _ as rest) ->
+        let s =
+          Ptime.diff b a |> Ptime.Span.to_int_s |> Option.value ~default:0
+        in
+        s :: diffs rest
+  in
+  match diffs times with
+  | [] -> None
+  | first :: rest ->
+      let count, min_s, max_s, sum =
+        List.fold_left
+          (fun (n, mn, mx, s) d -> (n + 1, min mn d, max mx d, s + d))
+          (1, first, first, first) rest
+      in
+      Some { count; min_s; max_s; avg_s = sum / count }
+
+let format_gap_s s =
+  if s < 60 then Printf.sprintf "%ds" s
+  else if s < 3600 then
+    let m = s / 60 and r = s mod 60 in
+    if r = 0 then Printf.sprintf "%dm" m else Printf.sprintf "%dm %ds" m r
+  else
+    let h = s / 3600 and rm = s mod 3600 in
+    let m = rm / 60 and r = rm mod 60 in
+    if rm = 0 then Printf.sprintf "%dh" h
+    else if r = 0 then Printf.sprintf "%dh %dm" h m
+    else Printf.sprintf "%dh %dm %ds" h m r
+
+let pp_next ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ?(gaps = false)
+    ppf ~format ~expr times =
+  let gap_stats = if gaps then compute_gaps times else None in
   match format with
   | Plain ->
       Format.fprintf ppf "Next fire times for %s (%s):@." expr
@@ -79,15 +100,37 @@ let pp_next ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
       List.iter
         (fun t ->
           Format.fprintf ppf "%s@." (string_of_time ~timezone ~time_format t))
-        times
+        times;
+      Option.iter
+        (fun g ->
+          Format.fprintf ppf "Gaps: min %s, max %s, avg %s@."
+            (format_gap_s g.min_s) (format_gap_s g.max_s) (format_gap_s g.avg_s))
+        gap_stats
   | Json ->
-      `Assoc
+      let base =
         [
           ("expr", `String expr);
           ("timezone", `String (Timezone.to_string timezone));
           ("times", `List (List.map (json_time ~timezone) times));
         ]
-      |> pp_json ppf
+      in
+      let assoc =
+        match gap_stats with
+        | None -> base
+        | Some g ->
+            base
+            @ [
+                ( "gaps",
+                  `Assoc
+                    [
+                      ("count", `Int g.count);
+                      ("min_s", `Int g.min_s);
+                      ("max_s", `Int g.max_s);
+                      ("avg_s", `Int g.avg_s);
+                    ] );
+              ]
+      in
+      `Assoc assoc |> pp_json ppf
 
 let pp_warnings ppf ~format ~expr warnings =
   match format with
@@ -236,6 +279,13 @@ let pp_check_json timezone ppf (report : Check.report) =
       ("overlaps", `List (List.map overlap_json report.overlaps));
     ]
   |> pp_json ppf
+
+let pp_explain ppf ~format ~expr description =
+  match format with
+  | Plain -> Format.fprintf ppf "%s@." description
+  | Json ->
+      `Assoc [ ("expr", `String expr); ("description", `String description) ]
+      |> pp_json ppf
 
 let pp_check ~timezone ?(time_format = Rfc3339) ppf ~format report =
   match format with

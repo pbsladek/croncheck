@@ -14,6 +14,7 @@ depends: [
   "ptime" {>= "1.1.0" & < "2.0.0"}
   "fmt" {>= "0.9.0" & < "1.0.0"}
   "alcotest" {with-test & >= "1.7.0" & < "2.0.0"}
+  "bisect_ppx" {with-test & >= "2.8.0" & < "3.0.0"}
   "yojson" {>= "2.1.0" & < "3.0.0"}
 ]
 build: [

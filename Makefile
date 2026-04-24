@@ -1,4 +1,4 @@
-.PHONY: all build test integration-test opam-lint check fmt fmt-check clean deps install run release help
+.PHONY: all build test integration-test coverage opam-lint check fmt fmt-check clean deps install run release help
 
 DUNE ?= dune
 OPAM ?= opam
@@ -15,7 +15,15 @@ test:
 	$(DUNE) test
 
 integration-test:
-	test/integration/e2e.sh
+	$(DUNE) test test/integration
+
+coverage:
+	$(DUNE) build --instrument-with bisect_ppx
+	rm -f bisect*.coverage
+	$(foreach exe,$(wildcard _build/default/test/test_*.exe),\
+	  BISECT_FILE=$(CURDIR)/bisect $(exe) 2>/dev/null;)
+	bisect-ppx-report html
+	bisect-ppx-report summary
 
 opam-lint:
 	$(OPAM) lint croncheck.opam
@@ -69,6 +77,7 @@ help:
 		'  make test       Run the test suite' \
 		'  make integration-test' \
 		'                  Run end-to-end CLI integration tests' \
+		'  make coverage   Run tests with instrumentation; open _coverage/index.html' \
 		'  make opam-lint  Validate croncheck.opam' \
 		'  make check      Build, test, and check formatting' \
 		'  make fmt        Format OCaml sources' \

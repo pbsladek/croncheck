@@ -62,18 +62,14 @@ let day_matches compiled ~dom ~dow =
   let dom_match = set_mem compiled.doms dom in
   let dow_match = dow_mem compiled.dows dow in
   match compiled.day_rule with
-  | Posix_day { dom_any; dow_any } -> (
-      match (dom_any, dow_any) with
-      | true, true -> true
-      | true, false -> dow_match
-      | false, true -> dom_match
-      | false, false -> dom_match || dow_match)
-  | Quartz_day { dom_specific; dow_specific } -> (
-      match (dom_specific, dow_specific) with
-      | false, false -> true
-      | false, true -> dow_match
-      | true, false -> dom_match
-      | true, true -> dom_match && dow_match)
+  | Posix_day { dom_any = true; dow_any = true } -> true
+  | Posix_day { dom_any = true; _ } -> dow_match
+  | Posix_day { dow_any = true; _ } -> dom_match
+  | Posix_day _ -> dom_match || dow_match
+  | Quartz_day { dom_specific = false; dow_specific = false } -> true
+  | Quartz_day { dom_specific = false; _ } -> dow_match
+  | Quartz_day { dow_specific = false; _ } -> dom_match
+  | Quartz_day _ -> dom_match && dow_match
 
 let possible compiled =
   let years =
