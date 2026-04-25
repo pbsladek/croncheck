@@ -25,9 +25,16 @@ like `America/New_York` are supported with `--tz`.
 ### From GitHub Releases
 
 Download the binary tarball and checksum for your platform from the latest
-release.
+release. Release artifacts are built for:
 
-Linux:
+- Linux x86_64: `croncheck-linux-x86_64.tar.gz`
+- Linux arm64: `croncheck-linux-arm64.tar.gz`
+- macOS x86_64: `croncheck-macos-x86_64.tar.gz`
+- macOS arm64: `croncheck-macos-arm64.tar.gz`
+- Windows x86_64: `croncheck-windows-x86_64.tar.gz`
+- Windows arm64: `croncheck-windows-arm64.tar.gz`
+
+Linux example:
 
 ```sh
 curl -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-linux-x86_64.tar.gz
@@ -43,7 +50,7 @@ Install it somewhere on your `PATH`:
 install -m 0755 croncheck-linux-x86_64 /usr/local/bin/croncheck
 ```
 
-macOS:
+macOS example:
 
 ```sh
 curl -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-macos-arm64.tar.gz
@@ -52,6 +59,15 @@ shasum -a 256 -c croncheck-macos-arm64.tar.gz.sha256
 tar -xzf croncheck-macos-arm64.tar.gz
 ./croncheck-macos-arm64 --help
 install -m 0755 croncheck-macos-arm64 /usr/local/bin/croncheck
+```
+
+Windows example, in PowerShell:
+
+```powershell
+curl.exe -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-windows-x86_64.tar.gz
+curl.exe -LO https://github.com/pbsladek/croncheck/releases/latest/download/croncheck-windows-x86_64.tar.gz.sha256
+tar -xzf croncheck-windows-x86_64.tar.gz
+.\croncheck-windows-x86_64.exe --help
 ```
 
 ### From Source
@@ -83,9 +99,9 @@ croncheck next "*/5 * * * *" --count 10
 
 ### Docker
 
-The published Docker Hub image is `pwbsladek/croncheck`. The runtime image is
-based on Docker Hardened Images (DHI) Debian Base. If you build locally, log in
-to DHI first:
+The published Docker Hub image is `pwbsladek/croncheck` for `linux/amd64` and
+`linux/arm64`. The runtime image is based on Docker Hardened Images (DHI)
+Debian Base. If you build locally, log in to DHI first:
 
 ```sh
 docker login dhi.io
@@ -219,13 +235,17 @@ make release VERSION=v0.1.0
 ```
 
 That command runs the full local check, creates an annotated tag, and pushes it.
-The GitHub release workflow builds Linux and macOS binary tarballs, smoke-tests
-the downloaded artifacts, and publishes matching SHA-256 checksum files:
+The GitHub release workflow builds Linux, macOS, and Windows binary tarballs for
+x86_64 and arm64, smoke-tests the downloaded artifacts, and publishes matching
+SHA-256 checksum files:
 
 ```sh
 sha256sum -c croncheck-linux-x86_64.tar.gz.sha256
 shasum -a 256 -c croncheck-macos-arm64.tar.gz.sha256
 ```
+
+The release workflow also publishes the Docker image manifest for `linux/amd64`
+and `linux/arm64` to Docker Hub.
 
 GitHub Actions updates are tracked by Dependabot. SLSA/provenance metadata is
 not enabled yet.
