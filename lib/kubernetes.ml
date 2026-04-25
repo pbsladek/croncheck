@@ -115,11 +115,7 @@ let job_of_doc source_path doc =
                   Timezone.parse raw
                   |> Result.map (fun tz -> Some tz)
                   |> Result.map_error (fun message ->
-                         {
-                           file = source_path;
-                           line = Some timezone_line;
-                           message;
-                         })
+                      { file = source_path; line = Some timezone_line; message })
             in
             Result.bind timezone (fun timezone ->
                 if

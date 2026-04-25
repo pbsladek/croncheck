@@ -22,8 +22,8 @@ let parse_env_assignment line =
       if
         name <> ""
         && (match name.[0] with
-           | 'A' .. 'Z' | 'a' .. 'z' | '_' -> true
-           | _ -> false)
+          | 'A' .. 'Z' | 'a' .. 'z' | '_' -> true
+          | _ -> false)
         && String.for_all valid_name_char name
       then Some (String.uppercase_ascii name, value)
       else None

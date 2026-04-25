@@ -42,7 +42,7 @@ let make_set ?(normalize = Fun.id) ~min ~max values =
   let members =
     Array.to_list set
     |> List.mapi (fun index present ->
-           if present then Some (index + min) else None)
+        if present then Some (index + min) else None)
     |> List.filter_map Fun.id
   in
   { offset = min; values = set; members }
