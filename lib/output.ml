@@ -49,6 +49,11 @@ let warning_to_string = function
   | EndOfMonthTrap ->
       "end-of-month trap; selected days do not occur every month"
   | LeapYearOnly -> "leap-year-only schedule"
+  | DstAmbiguousHour { hour } ->
+      Printf.sprintf
+        "fires at %02d:xx which falls in a common DST transition window; \
+         verify behavior with --tz"
+        hour
 
 let json_time ?(timezone = Timezone.utc) t =
   `String (string_of_time ~timezone t)
@@ -242,6 +247,14 @@ let pp_check_plain timezone time_format ppf report =
   if report.overlaps <> [] then
     pp_overlaps ~timezone ~time_format ppf ~format:Plain report.overlaps
 
+let pp_policy_violations_plain ppf violations =
+  if violations <> [] then (
+    Format.fprintf ppf "Policy violations:@.";
+    List.iter
+      (fun v ->
+        Format.fprintf ppf "%s: %s@." (Job.label v.Policy.job) v.message)
+      violations)
+
 let pp_check_json timezone ppf (report : Check.report) =
   let warning_json (job, warnings) =
     `Assoc
@@ -280,6 +293,57 @@ let pp_check_json timezone ppf (report : Check.report) =
     ]
   |> pp_json ppf
 
+let policy_violation_json v =
+  `Assoc
+    [
+      ("job", job_json v.Policy.job);
+      ("rule", `String (Policy.rule_to_string v.rule));
+      ("message", `String v.message);
+    ]
+
+let pp_check_with_policy_json timezone ppf (policy_report : Check.policy_report)
+    =
+  let warning_json (job, warnings) =
+    `Assoc
+      [
+        ("job", job_json job);
+        ( "warnings",
+          `List
+            (List.map
+               (fun warning -> `String (warning_to_string warning))
+               warnings) );
+      ]
+  in
+  let conflict_json c =
+    `Assoc
+      [
+        ("expr_a", `String c.Analysis.expr_a);
+        ("expr_b", `String c.expr_b);
+        ("at", json_time ~timezone c.at);
+        ("delta", `Int c.delta);
+      ]
+  in
+  let overlap_json o =
+    `Assoc
+      [
+        ("started_at", json_time ~timezone o.Analysis.started_at);
+        ("next_fire", json_time ~timezone o.next_fire);
+        ("overrun_by", `Int o.overrun_by);
+      ]
+  in
+  let report = policy_report.report in
+  `Assoc
+    [
+      ("jobs", `List (List.map job_json report.jobs));
+      ("warnings", `List (List.map warning_json report.warnings));
+      ("conflicts", `List (List.map conflict_json report.conflicts));
+      ("overlaps", `List (List.map overlap_json report.overlaps));
+      ( "policy_violations",
+        `List (List.map policy_violation_json policy_report.policy_violations)
+      );
+    ]
+  |> pp_json ppf
+
 let pp_explain ppf ~format ~expr description =
   match format with
   | Plain -> Format.fprintf ppf "%s@." description
@@ -287,7 +351,105 @@ let pp_explain ppf ~format ~expr description =
       `Assoc [ ("expr", `String expr); ("description", `String description) ]
       |> pp_json ppf
 
+let pp_diff ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
+    ~expr_a ~expr_b entries =
+  match format with
+  | Plain ->
+      if entries = [] then Format.fprintf ppf "Schedules are identical@."
+      else
+        List.iter
+          (fun e ->
+            let marker =
+              match e.Analysis.side with
+              | Left -> "<"
+              | Right -> ">"
+              | Both -> "="
+            in
+            Format.fprintf ppf "%s %s@." marker
+              (string_of_time ~timezone ~time_format e.time))
+          entries
+  | Json ->
+      let side_str = function
+        | Analysis.Left -> "left"
+        | Right -> "right"
+        | Both -> "both"
+      in
+      `Assoc
+        [
+          ("expr_a", `String expr_a);
+          ("expr_b", `String expr_b);
+          ("timezone", `String (Timezone.to_string timezone));
+          ( "diff",
+            `List
+              (List.map
+                 (fun e ->
+                   `Assoc
+                     [
+                       ("side", `String (side_str e.Analysis.side));
+                       ("time", json_time ~timezone e.time);
+                     ])
+                 entries) );
+        ]
+      |> pp_json ppf
+
+let pp_load ?(time_format = Rfc3339) ppf ~format report =
+  let timezone = report.Load.timezone in
+  let busiest = Load.busiest report in
+  let job_count_plain job_count =
+    Printf.sprintf "%s x%d" (Job.label job_count.Load.job) job_count.fires
+  in
+  let job_count_json job_count =
+    `Assoc
+      [
+        ("label", `String (Job.label job_count.Load.job));
+        ("fires", `Int job_count.fires);
+      ]
+  in
+  match format with
+  | Plain ->
+      if busiest = [] then Format.fprintf ppf "No scheduled fires found@."
+      else (
+        Format.fprintf ppf "Busiest %s buckets:@."
+          (format_gap_s report.bucket_seconds);
+        List.iter
+          (fun bucket ->
+            Format.fprintf ppf "%s: %d fires (%s)@."
+              (string_of_time ~timezone ~time_format bucket.Load.start)
+              bucket.fire_count
+              (bucket.job_counts |> List.map job_count_plain
+             |> String.concat ", "))
+          busiest)
+  | Json ->
+      `Assoc
+        [
+          ("timezone", `String (Timezone.to_string timezone));
+          ("from", json_time ~timezone report.from);
+          ("until", json_time ~timezone report.until);
+          ("bucket_s", `Int report.bucket_seconds);
+          ( "busiest",
+            `List
+              (List.map
+                 (fun bucket ->
+                   `Assoc
+                     [
+                       ("start", json_time ~timezone bucket.Load.start);
+                       ("fire_count", `Int bucket.fire_count);
+                       ( "jobs",
+                         `List (List.map job_count_json bucket.job_counts) );
+                     ])
+                 busiest) );
+        ]
+      |> pp_json ppf
+
 let pp_check ~timezone ?(time_format = Rfc3339) ppf ~format report =
   match format with
   | Plain -> pp_check_plain timezone time_format ppf report
   | Json -> pp_check_json timezone ppf report
+
+let pp_check_with_policy ~timezone ?(time_format = Rfc3339) ppf ~format
+    policy_report =
+  match format with
+  | Plain ->
+      pp_check_plain timezone time_format ppf policy_report.Check.report;
+      pp_policy_violations_plain ppf policy_report.policy_violations
+  | Json -> pp_check_with_policy_json timezone ppf policy_report

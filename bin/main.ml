@@ -25,8 +25,8 @@ let format_conv =
     | other ->
         Error
           (`Msg
-            (Printf.sprintf "expected output format 'plain' or 'json', got %S"
-               other))
+             (Printf.sprintf "expected output format 'plain' or 'json', got %S"
+                other))
   in
   let print ppf = function
     | Croncheck_lib.Output.Plain -> Format.pp_print_string ppf "plain"
@@ -41,8 +41,8 @@ let time_format_conv =
     | other ->
         Error
           (`Msg
-            (Printf.sprintf "expected time format 'rfc3339' or 'human', got %S"
-               other))
+             (Printf.sprintf "expected time format 'rfc3339' or 'human', got %S"
+                other))
   in
   let print ppf = function
     | Croncheck_lib.Output.Rfc3339 -> Format.pp_print_string ppf "rfc3339"
@@ -132,8 +132,8 @@ let ptime_conv =
         | _ ->
             Error
               (`Msg
-                (Printf.sprintf
-                   "expected RFC3339 timestamp or YYYY-MM-DD date, got %S" s)))
+                 (Printf.sprintf
+                    "expected RFC3339 timestamp or YYYY-MM-DD date, got %S" s)))
   in
   let print ppf t = Format.pp_print_string ppf (Ptime.to_rfc3339 t) in
   Arg.conv (parse, print)
@@ -163,8 +163,8 @@ let read_stdin_lines () =
   loop []
 
 let check_cmd =
-  let run format time_format timezone window threshold duration from_crontab
-      system_crontab from_k8s from_opt =
+  let run format time_format timezone window threshold duration policy_path
+      from_crontab system_crontab from_k8s from_opt =
     run_with_time_format format time_format (fun () ->
         let selected =
           List.filter_map Fun.id
@@ -192,16 +192,32 @@ let check_cmd =
           | Error errors ->
               print_input_errors errors;
               2
-          | Ok jobs ->
+          | Ok jobs -> (
               let from = Option.value from_opt ~default:(now ()) in
               let until = add_seconds from window in
-              let report =
-                Croncheck_lib.Check.analyze ~timezone ~from ~until ~threshold
-                  ~duration jobs
-              in
-              Croncheck_lib.Output.pp_check ~timezone Format.std_formatter
-                ~format ~time_format report;
-              exit_for_findings (Croncheck_lib.Check.has_findings report))
+              match policy_path with
+              | None ->
+                  let report =
+                    Croncheck_lib.Check.analyze ~timezone ~from ~until
+                      ~threshold ~duration jobs
+                  in
+                  Croncheck_lib.Output.pp_check ~timezone Format.std_formatter
+                    ~format ~time_format report;
+                  exit_for_findings (Croncheck_lib.Check.has_findings report)
+              | Some path -> (
+                  match Croncheck_lib.Policy.parse_file path with
+                  | Error errors ->
+                      print_input_errors errors;
+                      2
+                  | Ok policy ->
+                      let report =
+                        Croncheck_lib.Check.analyze_with_policy ~timezone ~from
+                          ~until ~threshold ~duration ~policy jobs
+                      in
+                      Croncheck_lib.Output.pp_check_with_policy ~timezone
+                        Format.std_formatter ~format ~time_format report;
+                      exit_for_findings
+                        (Croncheck_lib.Check.has_policy_findings report))))
   in
   let term =
     Term.(
@@ -237,6 +253,11 @@ let check_cmd =
       $ Arg.(
           value
           & opt (some string) None
+          & info [ "policy" ]
+              ~doc:"Read CI policy checks from a simple key-value file.")
+      $ Arg.(
+          value
+          & opt (some string) None
           & info [ "from-crontab" ] ~doc:"Read jobs from a crontab file.")
       $ Arg.(
           value & flag
@@ -253,8 +274,104 @@ let check_cmd =
        ~doc:"Analyze schedules from stdin, crontab, or Kubernetes YAML.")
     term
 
+let load_cmd =
+  let run format time_format timezone window bucket from_crontab system_crontab
+      from_k8s from_opt =
+    run_with_time_format format time_format (fun () ->
+        let selected =
+          List.filter_map Fun.id
+            [
+              Option.map (fun path -> `Crontab path) from_crontab;
+              Option.map (fun path -> `K8s path) from_k8s;
+            ]
+        in
+        if List.length selected > 1 then (
+          print_error "choose only one input source"
+            ~hint:
+              "Use only one of --from-crontab or --from-k8s; omit both to read \
+               from stdin.";
+          3)
+        else if bucket <= 0 then (
+          print_error "--bucket must be greater than zero";
+          3)
+        else
+          let source =
+            match selected with
+            | [] -> Croncheck_lib.Check.Stdin (read_stdin_lines ())
+            | [ `Crontab path ] ->
+                Croncheck_lib.Check.Crontab { path; system = system_crontab }
+            | [ `K8s path ] -> Croncheck_lib.Check.Kubernetes path
+            | _ -> Croncheck_lib.Check.Stdin []
+          in
+          match Croncheck_lib.Check.load source with
+          | Error errors ->
+              print_input_errors errors;
+              2
+          | Ok jobs ->
+              let from = Option.value from_opt ~default:(now ()) in
+              let until = add_seconds from window in
+              let report =
+                Croncheck_lib.Load.analyze ~timezone ~from ~until
+                  ~bucket_seconds:bucket jobs
+              in
+              Croncheck_lib.Output.pp_load ~time_format Format.std_formatter
+                ~format report;
+              0)
+  in
+  let term =
+    Term.(
+      const run
+      $ Arg.(
+          value
+          & opt format_conv Croncheck_lib.Output.Plain
+          & info [ "format" ] ~doc:"Output format: plain or json.")
+      $ Arg.(
+          value
+          & opt time_format_conv Croncheck_lib.Output.Rfc3339
+          & info [ "time-format" ]
+              ~doc:"Plain timestamp format: rfc3339 or human.")
+      $ Arg.(
+          value
+          & opt timezone_conv Croncheck_lib.Timezone.utc
+          & info [ "tz" ]
+              ~doc:
+                "Default timezone: UTC, Z, fixed offset such as +02:00, or \
+                 IANA name such as America/New_York.")
+      $ Arg.(
+          value
+          & opt duration_conv (24 * 60 * 60)
+          & info [ "window" ] ~doc:"Analysis window, e.g. 30d, 24h, 60m.")
+      $ Arg.(
+          value
+          & opt duration_conv (5 * 60)
+          & info [ "bucket" ] ~doc:"Bucket size, e.g. 60m, 5m, or 1h.")
+      $ Arg.(
+          value
+          & opt (some string) None
+          & info [ "from-crontab" ] ~doc:"Read jobs from a crontab file.")
+      $ Arg.(
+          value & flag
+          & info [ "system-crontab" ]
+              ~doc:"Parse crontab as system format with a user column.")
+      $ Arg.(
+          value
+          & opt (some string) None
+          & info [ "from-k8s" ] ~doc:"Read jobs from Kubernetes CronJob YAML.")
+      $ from_arg)
+  in
+  Cmd.v
+    (Cmd.info "load" ~doc:"Summarize fleet schedule density by time bucket.")
+    term
+
+let until_arg =
+  Arg.(
+    value
+    & opt (some ptime_conv) None
+    & info [ "until" ]
+        ~doc:"Stop at this time (RFC3339 or YYYY-MM-DD); defaults to no limit.")
+
 let next_cmd =
-  let run format time_format timezone count gaps from_opt raw =
+  let run format time_format timezone count gaps from_opt until_opt raw =
     run_with_time_format format time_format (fun () ->
         match parse_expr raw with
         | Error (`Msg msg) ->
@@ -263,7 +380,16 @@ let next_cmd =
         | Ok expr ->
             let from = Option.value from_opt ~default:(now ()) in
             let times =
-              Croncheck_lib.Schedule.next_n ~timezone expr ~from count
+              match until_opt with
+              | None -> Croncheck_lib.Schedule.next_n ~timezone expr ~from count
+              | Some until ->
+                  let rec take n = function
+                    | [] -> []
+                    | _ when n = 0 -> []
+                    | x :: rest -> x :: take (n - 1) rest
+                  in
+                  take count
+                    (Croncheck_lib.Schedule.within ~timezone expr ~from ~until)
             in
             Croncheck_lib.Output.pp_next ~timezone ~gaps Format.std_formatter
               ~format ~time_format ~expr:raw times;
@@ -294,7 +420,7 @@ let next_cmd =
       $ Arg.(
           value & flag
           & info [ "gaps" ] ~doc:"Show min/max/avg gap between fire times.")
-      $ from_arg
+      $ from_arg $ until_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
   Cmd.v (Cmd.info "next" ~doc:"List next fire times.") term
@@ -346,11 +472,11 @@ let conflicts_cmd =
               Croncheck_lib.Analysis.conflicts_with_timezone ~timezone ~expr_a
                 ~expr_b ~from ~until ~threshold
               |> List.map (fun c ->
-                     {
-                       c with
-                       Croncheck_lib.Analysis.expr_a = raw_a;
-                       expr_b = raw_b;
-                     })
+                  {
+                    c with
+                    Croncheck_lib.Analysis.expr_a = raw_a;
+                    expr_b = raw_b;
+                  })
             in
             Croncheck_lib.Output.pp_conflicts ~timezone Format.std_formatter
               ~format ~time_format conflicts;
@@ -442,6 +568,61 @@ let overlaps_cmd =
     (Cmd.info "overlaps" ~doc:"Find self-overlaps for a long-running job.")
     term
 
+let diff_cmd =
+  let run format time_format timezone window from_opt raw_a raw_b =
+    run_with_time_format format time_format (fun () ->
+        match (parse_expr raw_a, parse_expr raw_b) with
+        | Error (`Msg msg), _ ->
+            print_parse_error ~expr:raw_a msg;
+            2
+        | _, Error (`Msg msg) ->
+            print_parse_error ~expr:raw_b msg;
+            2
+        | Ok expr_a, Ok expr_b ->
+            let from = Option.value from_opt ~default:(now ()) in
+            let until = add_seconds from window in
+            let entries =
+              Croncheck_lib.Analysis.diff ~timezone expr_a ~expr_b ~from ~until
+            in
+            Croncheck_lib.Output.pp_diff ~timezone ~time_format
+              Format.std_formatter ~format ~expr_a:raw_a ~expr_b:raw_b entries;
+            let differs =
+              List.exists
+                (fun e ->
+                  e.Croncheck_lib.Analysis.side <> Croncheck_lib.Analysis.Both)
+                entries
+            in
+            exit_for_findings differs)
+  in
+  let term =
+    Term.(
+      const run
+      $ Arg.(
+          value
+          & opt format_conv Croncheck_lib.Output.Plain
+          & info [ "format" ] ~doc:"Output format: plain or json.")
+      $ Arg.(
+          value
+          & opt time_format_conv Croncheck_lib.Output.Rfc3339
+          & info [ "time-format" ]
+              ~doc:"Plain timestamp format: rfc3339 or human.")
+      $ Arg.(
+          value
+          & opt timezone_conv Croncheck_lib.Timezone.utc
+          & info [ "tz" ]
+              ~doc:
+                "Timezone: UTC, Z, fixed offset such as +02:00, or IANA name \
+                 such as America/New_York.")
+      $ Arg.(
+          value
+          & opt duration_conv (24 * 60 * 60)
+          & info [ "window" ] ~doc:"Comparison window, e.g. 30d, 24h, 60m.")
+      $ from_arg
+      $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR")
+      $ Arg.(required & pos 1 (some string) None & info [] ~docv:"EXPR"))
+  in
+  Cmd.v (Cmd.info "diff" ~doc:"Compare fire times of two expressions.") term
+
 let explain_cmd =
   let run format raw =
     match parse_expr raw with
@@ -475,7 +656,14 @@ let () =
   let cmd =
     Cmd.group info
       [
-        next_cmd; warn_cmd; conflicts_cmd; overlaps_cmd; check_cmd; explain_cmd;
+        next_cmd;
+        warn_cmd;
+        conflicts_cmd;
+        overlaps_cmd;
+        diff_cmd;
+        load_cmd;
+        check_cmd;
+        explain_cmd;
       ]
   in
   let code =

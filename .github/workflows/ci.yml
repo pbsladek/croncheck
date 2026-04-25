@@ -70,7 +70,7 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install formatter
-        run: opam install --yes --quiet dune ocamlformat.0.26.2
+        run: opam install --yes --quiet dune ocamlformat.0.29.0
 
       - name: Check formatting
         run: opam exec -- make fmt-check
