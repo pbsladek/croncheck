@@ -47,6 +47,16 @@ val pp_overlaps :
   Analysis.overlap list ->
   unit
 
+val pp_diff :
+  ?timezone:Timezone.t ->
+  ?time_format:time_format ->
+  Format.formatter ->
+  format:format ->
+  expr_a:string ->
+  expr_b:string ->
+  Analysis.diff_entry list ->
+  unit
+
 val pp_check :
   timezone:Timezone.t ->
   ?time_format:time_format ->

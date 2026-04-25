@@ -49,6 +49,11 @@ let warning_to_string = function
   | EndOfMonthTrap ->
       "end-of-month trap; selected days do not occur every month"
   | LeapYearOnly -> "leap-year-only schedule"
+  | DstAmbiguousHour { hour } ->
+      Printf.sprintf
+        "fires at %02d:xx which falls in a common DST transition window; \
+         verify behavior with --tz"
+        hour
 
 let json_time ?(timezone = Timezone.utc) t =
   `String (string_of_time ~timezone t)
@@ -285,6 +290,47 @@ let pp_explain ppf ~format ~expr description =
   | Plain -> Format.fprintf ppf "%s@." description
   | Json ->
       `Assoc [ ("expr", `String expr); ("description", `String description) ]
+      |> pp_json ppf
+
+let pp_diff ?(timezone = Timezone.utc) ?(time_format = Rfc3339) ppf ~format
+    ~expr_a ~expr_b entries =
+  match format with
+  | Plain ->
+      if entries = [] then Format.fprintf ppf "Schedules are identical@."
+      else
+        List.iter
+          (fun e ->
+            let marker =
+              match e.Analysis.side with
+              | Left -> "<"
+              | Right -> ">"
+              | Both -> "="
+            in
+            Format.fprintf ppf "%s %s@." marker
+              (string_of_time ~timezone ~time_format e.time))
+          entries
+  | Json ->
+      let side_str = function
+        | Analysis.Left -> "left"
+        | Right -> "right"
+        | Both -> "both"
+      in
+      `Assoc
+        [
+          ("expr_a", `String expr_a);
+          ("expr_b", `String expr_b);
+          ("timezone", `String (Timezone.to_string timezone));
+          ( "diff",
+            `List
+              (List.map
+                 (fun e ->
+                   `Assoc
+                     [
+                       ("side", `String (side_str e.Analysis.side));
+                       ("time", json_time ~timezone e.time);
+                     ])
+                 entries) );
+        ]
       |> pp_json ppf
 
 let pp_check ~timezone ?(time_format = Rfc3339) ppf ~format report =

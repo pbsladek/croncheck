@@ -408,6 +408,83 @@ overlaps: --from flag pins analysis window start.
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
 
+next: --until bounds output to a window.
+
+  $ croncheck next "0 * * * *" --from 2024-01-01 --until 2024-01-01T04:00:00Z
+  Next fire times for 0 * * * * (UTC):
+  2024-01-01T01:00:00Z
+  2024-01-01T02:00:00Z
+  2024-01-01T03:00:00Z
+  2024-01-01T04:00:00Z
+
+next: --until with --count uses whichever limit comes first.
+
+  $ croncheck next "0 * * * *" --from 2024-01-01 --until 2024-01-01T06:00:00Z --count 3
+  Next fire times for 0 * * * * (UTC):
+  2024-01-01T01:00:00Z
+  2024-01-01T02:00:00Z
+  2024-01-01T03:00:00Z
+
+next: --until with no fires in window prints empty list.
+
+  $ croncheck next "0 0 1 1 *" --from 2024-02-01 --until 2024-03-01
+  Next fire times for 0 0 1 1 * (UTC):
+
+diff: identical schedules show = markers and exit 0.
+
+  $ croncheck diff "*/5 * * * *" "*/5 * * * *" --from 2024-01-01 --window 15m
+  = 2024-01-01T00:05:00Z
+  = 2024-01-01T00:10:00Z
+  = 2024-01-01T00:15:00Z
+
+diff: no fires in window prints nothing and exits 0.
+
+  $ croncheck diff "0 0 1 1 *" "0 0 1 2 *" --from 2024-03-01 --window 24h
+  Schedules are identical
+
+diff: different schedules mark left-only and right-only times.
+
+  $ croncheck diff "0 9 * * *" "0 10 * * *" --from 2024-01-01 --window 48h
+  < 2024-01-01T09:00:00Z
+  > 2024-01-01T10:00:00Z
+  < 2024-01-02T09:00:00Z
+  > 2024-01-02T10:00:00Z
+  [1]
+
+diff: shared fire times are marked with =.
+
+  $ croncheck diff "0 */6 * * *" "0 0 * * *" --from 2024-01-01 --window 24h
+  < 2024-01-01T06:00:00Z
+  < 2024-01-01T12:00:00Z
+  < 2024-01-01T18:00:00Z
+  = 2024-01-02T00:00:00Z
+  [1]
+
+diff: JSON output includes expr_a, expr_b, timezone, and diff fields.
+
+  $ croncheck diff "0 9 * * *" "0 10 * * *" --from 2024-01-01 --window 24h --format json | grep -E '"expr_a"|"expr_b"|"timezone"|"diff"'
+    "expr_a": "0 9 * * *",
+    "expr_b": "0 10 * * *",
+    "timezone": "UTC",
+    "diff": [
+
+warn: DST-observing timezone warns about 2 AM schedule.
+
+  $ croncheck warn "0 2 * * *" --tz America/New_York
+  Warnings for 0 2 * * *:
+  - fires at 02:xx which falls in a common DST transition window; verify behavior with --tz
+  [1]
+
+warn: UTC timezone does not warn about 2 AM schedule.
+
+  $ croncheck warn "0 2 * * *" --tz UTC
+  No warnings for 0 2 * * *
+
+warn: every-hour expression (Any hour field) does not trigger DST warning.
+
+  $ croncheck warn "0 * * * *" --tz America/New_York
+  No warnings for 0 * * * *
+
 help: tool description is shown.
 
   $ croncheck --help | grep "Static analysis"

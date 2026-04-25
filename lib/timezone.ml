@@ -521,6 +521,10 @@ let parse_offset s =
         | _ -> None)
     | Some _ -> None
 
+let is_dst_observing = function
+  | Utc | Fixed_offset _ -> false
+  | Iana zone -> List.length zone.offsets > 1
+
 let parse s =
   let raw = String.trim s in
   match String.uppercase_ascii raw with

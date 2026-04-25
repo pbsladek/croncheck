@@ -253,8 +253,15 @@ let check_cmd =
        ~doc:"Analyze schedules from stdin, crontab, or Kubernetes YAML.")
     term
 
+let until_arg =
+  Arg.(
+    value
+    & opt (some ptime_conv) None
+    & info [ "until" ]
+        ~doc:"Stop at this time (RFC3339 or YYYY-MM-DD); defaults to no limit.")
+
 let next_cmd =
-  let run format time_format timezone count gaps from_opt raw =
+  let run format time_format timezone count gaps from_opt until_opt raw =
     run_with_time_format format time_format (fun () ->
         match parse_expr raw with
         | Error (`Msg msg) ->
@@ -263,7 +270,16 @@ let next_cmd =
         | Ok expr ->
             let from = Option.value from_opt ~default:(now ()) in
             let times =
-              Croncheck_lib.Schedule.next_n ~timezone expr ~from count
+              match until_opt with
+              | None -> Croncheck_lib.Schedule.next_n ~timezone expr ~from count
+              | Some until ->
+                  let rec take n = function
+                    | [] -> []
+                    | _ when n = 0 -> []
+                    | x :: rest -> x :: take (n - 1) rest
+                  in
+                  take count
+                    (Croncheck_lib.Schedule.within ~timezone expr ~from ~until)
             in
             Croncheck_lib.Output.pp_next ~timezone ~gaps Format.std_formatter
               ~format ~time_format ~expr:raw times;
@@ -295,6 +311,7 @@ let next_cmd =
           value & flag
           & info [ "gaps" ] ~doc:"Show min/max/avg gap between fire times.")
       $ from_arg
+      $ until_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
   Cmd.v (Cmd.info "next" ~doc:"List next fire times.") term
@@ -442,6 +459,63 @@ let overlaps_cmd =
     (Cmd.info "overlaps" ~doc:"Find self-overlaps for a long-running job.")
     term
 
+let diff_cmd =
+  let run format time_format timezone window from_opt raw_a raw_b =
+    run_with_time_format format time_format (fun () ->
+        match (parse_expr raw_a, parse_expr raw_b) with
+        | Error (`Msg msg), _ ->
+            print_parse_error ~expr:raw_a msg;
+            2
+        | _, Error (`Msg msg) ->
+            print_parse_error ~expr:raw_b msg;
+            2
+        | Ok expr_a, Ok expr_b ->
+            let from = Option.value from_opt ~default:(now ()) in
+            let until = add_seconds from window in
+            let entries =
+              Croncheck_lib.Analysis.diff ~timezone expr_a ~expr_b ~from ~until
+            in
+            Croncheck_lib.Output.pp_diff ~timezone ~time_format
+              Format.std_formatter ~format ~expr_a:raw_a ~expr_b:raw_b entries;
+            let differs =
+              List.exists
+                (fun e ->
+                  e.Croncheck_lib.Analysis.side <> Croncheck_lib.Analysis.Both)
+                entries
+            in
+            exit_for_findings differs)
+  in
+  let term =
+    Term.(
+      const run
+      $ Arg.(
+          value
+          & opt format_conv Croncheck_lib.Output.Plain
+          & info [ "format" ] ~doc:"Output format: plain or json.")
+      $ Arg.(
+          value
+          & opt time_format_conv Croncheck_lib.Output.Rfc3339
+          & info [ "time-format" ]
+              ~doc:"Plain timestamp format: rfc3339 or human.")
+      $ Arg.(
+          value
+          & opt timezone_conv Croncheck_lib.Timezone.utc
+          & info [ "tz" ]
+              ~doc:
+                "Timezone: UTC, Z, fixed offset such as +02:00, or IANA name \
+                 such as America/New_York.")
+      $ Arg.(
+          value
+          & opt duration_conv (24 * 60 * 60)
+          & info [ "window" ] ~doc:"Comparison window, e.g. 30d, 24h, 60m.")
+      $ from_arg
+      $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR")
+      $ Arg.(required & pos 1 (some string) None & info [] ~docv:"EXPR"))
+  in
+  Cmd.v
+    (Cmd.info "diff" ~doc:"Compare fire times of two expressions.")
+    term
+
 let explain_cmd =
   let run format raw =
     match parse_expr raw with
@@ -475,7 +549,13 @@ let () =
   let cmd =
     Cmd.group info
       [
-        next_cmd; warn_cmd; conflicts_cmd; overlaps_cmd; check_cmd; explain_cmd;
+        next_cmd;
+        warn_cmd;
+        conflicts_cmd;
+        overlaps_cmd;
+        diff_cmd;
+        check_cmd;
+        explain_cmd;
       ]
   in
   let code =

@@ -10,5 +10,6 @@ val weekday_of_date :
   Ptime.date -> [ `Fri | `Mon | `Sat | `Sun | `Thu | `Tue | `Wed ]
 
 val instants_of_local_date_time : t -> Ptime.date * Ptime.time -> Ptime.t list
+val is_dst_observing : t -> bool
 val to_string : t -> string
 val parse : string -> (t, string) result

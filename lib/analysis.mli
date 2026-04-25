@@ -5,6 +5,7 @@ type warning =
   | HighFrequency of { per_hour : int }
   | EndOfMonthTrap
   | LeapYearOnly
+  | DstAmbiguousHour of { hour : int }
 
 val warn : ?timezone:Timezone.t -> ?from:Ptime.t -> Cron.expr -> warning list
 
@@ -55,3 +56,14 @@ val overlaps :
   until:Ptime.t ->
   duration:int ->
   overlap list
+
+type diff_side = Left | Right | Both
+type diff_entry = { side : diff_side; time : Ptime.t }
+
+val diff :
+  ?timezone:Timezone.t ->
+  Cron.expr ->
+  expr_b:Cron.expr ->
+  from:Ptime.t ->
+  until:Ptime.t ->
+  diff_entry list
