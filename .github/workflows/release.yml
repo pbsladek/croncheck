@@ -14,12 +14,30 @@ env:
 
 jobs:
   build-artifacts:
-    name: Build ${{ matrix.os }} binary
+    name: Build ${{ matrix.artifact }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - runner: ubuntu-24.04
+            artifact: croncheck-linux-x86_64
+            exe: ""
+          - runner: ubuntu-24.04-arm
+            artifact: croncheck-linux-arm64
+            exe: ""
+          - runner: macos-15-intel
+            artifact: croncheck-macos-x86_64
+            exe: ""
+          - runner: macos-15
+            artifact: croncheck-macos-arm64
+            exe: ""
+          - runner: windows-2025
+            artifact: croncheck-windows-x86_64
+            exe: ".exe"
+          - runner: windows-11-arm
+            artifact: croncheck-windows-arm64
+            exe: ".exe"
+    runs-on: ${{ matrix.runner }}
 
     steps:
       # actions/checkout@v6
@@ -31,71 +49,59 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install dependencies
+        shell: bash
         run: |
           opam pin add --yes --quiet --no-action --kind=path croncheck .
           opam install --yes --quiet --deps-only --with-test croncheck
 
-      - name: Build and test
+      - name: Build binary
+        shell: bash
         run: |
-          opam exec -- make build
-          opam exec -- make test
-          opam exec -- make integration-test
+          opam exec -- dune build --profile release bin/main.exe
 
-      - name: Set artifact name
-        id: artifact
+      - name: Smoke test binary
+        shell: bash
         run: |
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          arch="$(uname -m)"
-
-          case "$os" in
-            linux) os_name="linux" ;;
-            darwin) os_name="macos" ;;
-            *) echo "unsupported os: $os" >&2; exit 1 ;;
-          esac
-
-          case "$arch" in
-            x86_64|amd64) arch_name="x86_64" ;;
-            arm64|aarch64) arch_name="arm64" ;;
-            *) echo "unsupported arch: $arch" >&2; exit 1 ;;
-          esac
-
-          name="croncheck-${os_name}-${arch_name}"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+          _build/default/bin/main.exe --help | grep -F "Static analysis"
 
       - name: Package binary
+        shell: bash
         run: |
-          artifact="${{ steps.artifact.outputs.name }}"
+          artifact="${{ matrix.artifact }}"
+          exe="${{ matrix.exe }}"
           mkdir -p dist
-          cp _build/default/bin/main.exe "dist/$artifact"
-          chmod +x "dist/$artifact"
-          tar -C dist -czf "$artifact.tar.gz" "$artifact"
+          cp _build/default/bin/main.exe "dist/$artifact$exe"
+          chmod +x "dist/$artifact$exe"
+          tar -C dist -czf "$artifact.tar.gz" "$artifact$exe"
           shasum -a 256 "$artifact.tar.gz" > "$artifact.tar.gz.sha256"
 
       - name: Upload artifact
         # actions/upload-artifact@v7
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ${{ steps.artifact.outputs.name }}
+          name: ${{ matrix.artifact }}
           path: |
-            ${{ steps.artifact.outputs.name }}.tar.gz
-            ${{ steps.artifact.outputs.name }}.tar.gz.sha256
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.tar.gz.sha256
 
       - name: Download artifact for smoke test
         # actions/download-artifact@v8
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ${{ steps.artifact.outputs.name }}
+          name: ${{ matrix.artifact }}
           path: downloaded
 
       - name: Smoke test release artifact
+        shell: bash
         run: |
-          artifact="${{ steps.artifact.outputs.name }}"
+          artifact="${{ matrix.artifact }}"
+          exe="${{ matrix.exe }}"
           cd downloaded
           shasum -a 256 -c "$artifact.tar.gz.sha256"
           cd ..
           mkdir -p smoke
           tar -C smoke -xzf "downloaded/$artifact.tar.gz"
-          "smoke/$artifact" --help | grep -F "Static analysis"
+          "smoke/$artifact$exe" --help | grep -F "Static analysis"
 
   publish:
     name: Publish GitHub release
