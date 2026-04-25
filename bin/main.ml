@@ -310,8 +310,7 @@ let next_cmd =
       $ Arg.(
           value & flag
           & info [ "gaps" ] ~doc:"Show min/max/avg gap between fire times.")
-      $ from_arg
-      $ until_arg
+      $ from_arg $ until_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
   Cmd.v (Cmd.info "next" ~doc:"List next fire times.") term
@@ -512,9 +511,7 @@ let diff_cmd =
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR")
       $ Arg.(required & pos 1 (some string) None & info [] ~docv:"EXPR"))
   in
-  Cmd.v
-    (Cmd.info "diff" ~doc:"Compare fire times of two expressions.")
-    term
+  Cmd.v (Cmd.info "diff" ~doc:"Compare fire times of two expressions.") term
 
 let explain_cmd =
   let run format raw =
