@@ -12,6 +12,9 @@ It can:
 - warn about surprising schedules
 - find conflicts between schedules
 - find self-overlaps for long-running jobs
+- compare schedule changes before rollout
+- summarize fleet schedule hotspots
+- enforce simple CI policy checks
 - read schedules from stdin, crontab files, or Kubernetes CronJob YAML
 
 Times are UTC by default. Fixed offsets like `+02:00` and IANA timezone names
@@ -78,6 +81,42 @@ Then run:
 croncheck next "*/5 * * * *" --count 10
 ```
 
+### Docker
+
+The published Docker Hub image is `pwbsladek/croncheck`. The runtime image is
+based on Docker Hardened Images (DHI) Debian Base. If you build locally, log in
+to DHI first:
+
+```sh
+docker login dhi.io
+```
+
+Build the image locally:
+
+```sh
+make docker-build DOCKER_TAG=local
+```
+
+Run it:
+
+```sh
+docker run --rm pwbsladek/croncheck:local explain "0 9 * * 1-5"
+docker run --rm pwbsladek/croncheck:local next "0 9 * * *" --tz America/New_York --count 3
+```
+
+Push a tagged image to Docker Hub:
+
+```sh
+make docker-build DOCKER_TAG=v0.1.0
+make docker-push DOCKER_TAG=v0.1.0
+```
+
+Tagged releases also publish `pwbsladek/croncheck:<tag>` and
+`pwbsladek/croncheck:latest` from GitHub Actions. Configure repository secrets
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` before cutting a release tag. The
+same Docker credentials are used to pull DHI images from `dhi.io` and push the
+final image to Docker Hub.
+
 ## Usage
 
 ```sh
@@ -93,6 +132,7 @@ croncheck next "0 0 * * *" --from 2024-01-01      # pin start time
 croncheck warn "0 0 31 * *"
 croncheck conflicts "*/5 * * * *" "*/3 * * * *" --window 24h --threshold 0
 croncheck overlaps "* * * * *" --window 60m --duration 120
+croncheck diff "0 9 * * *" "0 10 * * *" --window 7d
 ```
 
 Plain output uses RFC3339 timestamps by default. Use `--time-format human` for
@@ -116,6 +156,20 @@ Analyze multiple schedules:
 printf '%s\n' "0 0 * * *" "0 0 31 * *" | croncheck check
 croncheck check --from-crontab /etc/crontab --system-crontab
 croncheck check --from-k8s cronjobs.yaml --format json
+croncheck load --from-k8s cronjobs.yaml --window 7d --bucket 5m
+```
+
+Policy checks:
+
+```sh
+cat > croncheck.policy <<'EOF'
+forbid_every_minute: true
+require_timezone: true
+max_frequency_per_hour: 12
+disallow_midnight_utc: true
+EOF
+
+croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy
 ```
 
 Supported syntax:

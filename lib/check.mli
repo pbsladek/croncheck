@@ -10,6 +10,11 @@ type report = {
   overlaps : Analysis.overlap list;
 }
 
+type policy_report = {
+  report : report;
+  policy_violations : Policy.violation list;
+}
+
 val load : source -> (Job.t list, string list) result
 
 val analyze :
@@ -21,4 +26,15 @@ val analyze :
   Job.t list ->
   report
 
+val analyze_with_policy :
+  timezone:Timezone.t ->
+  from:Ptime.t ->
+  until:Ptime.t ->
+  threshold:int ->
+  duration:int option ->
+  policy:Policy.t ->
+  Job.t list ->
+  policy_report
+
 val has_findings : report -> bool
+val has_policy_findings : policy_report -> bool

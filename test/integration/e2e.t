@@ -468,6 +468,55 @@ diff: JSON output includes expr_a, expr_b, timezone, and diff fields.
     "timezone": "UTC",
     "diff": [
 
+load: stdin schedules show busiest buckets and exit 0.
+
+  $ printf '%s\n' "*/5 * * * *" "*/15 * * * *" | croncheck load --from 2024-01-01 --window 15m --bucket 1h
+  Busiest 1h buckets:
+  2024-01-01T00:00:00Z: 4 fires (stdin:1 x3, stdin:2 x1)
+
+load: JSON output includes bucket details.
+
+  $ printf '%s\n' "*/5 * * * *" "*/15 * * * *" | croncheck load --from 2024-01-01 --window 15m --bucket 1h --format json | grep -E '"timezone"|"bucket_s"|"busiest"|"fire_count"|"label"|"fires"'
+    "timezone": "UTC",
+    "bucket_s": 3600,
+    "busiest": [
+        "fire_count": 4,
+          { "label": "stdin:1", "fires": 3 },
+          { "label": "stdin:2", "fires": 1 }
+
+Create a policy file.
+
+  $ cat > croncheck.policy << 'EOF'
+  > forbid_every_minute: true
+  > require_timezone: true
+  > max_frequency_per_hour: 12
+  > disallow_midnight_utc: true
+  > EOF
+
+check: policy violations are reported and exit 1.
+
+  $ printf '%s\n' "* * * * *" "0 0 * * *" | croncheck check --from 2024-01-01 --window 24h --policy croncheck.policy
+  stdin:1: * * * * *
+  - high frequency (60 times/hour)
+  conflict at 2024-01-02T00:00:00Z (delta 0s)
+  Policy violations:
+  stdin:1: every-minute schedules are not allowed
+  stdin:1: job must specify an explicit timezone
+  stdin:1: fires 60 times/hour, above limit 12
+  stdin:1: fires at midnight UTC
+  stdin:2: job must specify an explicit timezone
+  stdin:2: fires at midnight UTC
+  [1]
+
+check: policy violations are included in JSON output.
+
+  $ printf '%s\n' "* * * * *" | croncheck check --from 2024-01-01 --window 60m --policy croncheck.policy --format json | grep -E '"policy_violations"|"rule"|"message"' | head -5
+    "policy_violations": [
+        "rule": "forbid_every_minute",
+        "message": "every-minute schedules are not allowed"
+        "rule": "require_timezone",
+        "message": "job must specify an explicit timezone"
+
 warn: DST-observing timezone warns about 2 AM schedule.
 
   $ croncheck warn "0 2 * * *" --tz America/New_York

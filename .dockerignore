@@ -1,0 +1,6 @@
+.git
+_build
+*.coverage
+_coverage
+*.tar.gz
+*.sha256

@@ -10,6 +10,11 @@ type report = {
   overlaps : Analysis.overlap list;
 }
 
+type policy_report = {
+  report : report;
+  policy_violations : Policy.violation list;
+}
+
 let parse_stdin lines =
   let _, jobs, errors =
     List.fold_left
@@ -40,9 +45,9 @@ let load = function
       | Error errors ->
           errors
           |> List.map (fun (e : Crontab.error) ->
-                 match e.line with
-                 | Some line -> Printf.sprintf "%s:%d: %s" path line e.message
-                 | None -> Printf.sprintf "%s: %s" path e.message)
+              match e.line with
+              | Some line -> Printf.sprintf "%s:%d: %s" path line e.message
+              | None -> Printf.sprintf "%s: %s" path e.message)
           |> Result.error)
   | Kubernetes path -> (
       match Kubernetes.parse_file path with
@@ -50,9 +55,9 @@ let load = function
       | Error errors ->
           errors
           |> List.map (fun (e : Kubernetes.error) ->
-                 match e.line with
-                 | Some line -> Printf.sprintf "%s:%d: %s" e.file line e.message
-                 | None -> Printf.sprintf "%s: %s" e.file e.message)
+              match e.line with
+              | Some line -> Printf.sprintf "%s:%d: %s" e.file line e.message
+              | None -> Printf.sprintf "%s: %s" e.file e.message)
           |> Result.error)
 
 let job_timezone fallback job = Option.value job.Job.timezone ~default:fallback
@@ -102,6 +107,15 @@ let analyze ~timezone ~from ~until ~threshold ~duration jobs =
   in
   { jobs; warnings; conflicts; overlaps }
 
+let analyze_with_policy ~timezone ~from ~until ~threshold ~duration ~policy jobs
+    =
+  let report = analyze ~timezone ~from ~until ~threshold ~duration jobs in
+  let policy_violations = Policy.evaluate ~timezone ~from ~until policy jobs in
+  { report; policy_violations }
+
 let has_findings report =
   List.exists (fun (_, warnings) -> warnings <> []) report.warnings
   || report.conflicts <> [] || report.overlaps <> []
+
+let has_policy_findings policy_report =
+  has_findings policy_report.report || policy_report.policy_violations <> []
