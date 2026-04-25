@@ -32,7 +32,6 @@ release. Release artifacts are built for:
 - macOS x86_64: `croncheck-macos-x86_64.tar.gz`
 - macOS arm64: `croncheck-macos-arm64.tar.gz`
 - Windows x86_64: `croncheck-windows-x86_64.tar.gz`
-- Windows arm64: `croncheck-windows-arm64.tar.gz`
 
 Linux example:
 
@@ -235,9 +234,9 @@ make release VERSION=v0.1.0
 ```
 
 That command runs the full local check, creates an annotated tag, and pushes it.
-The GitHub release workflow builds Linux, macOS, and Windows binary tarballs for
-x86_64 and arm64, smoke-tests the downloaded artifacts, and publishes matching
-SHA-256 checksum files:
+The GitHub release workflow builds Linux and macOS binary tarballs for x86_64
+and arm64, plus Windows x86_64, smoke-tests the downloaded artifacts, and
+publishes matching SHA-256 checksum files:
 
 ```sh
 sha256sum -c croncheck-linux-x86_64.tar.gz.sha256
