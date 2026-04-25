@@ -34,9 +34,6 @@ jobs:
           - runner: windows-2025
             artifact: croncheck-windows-x86_64
             exe: ".exe"
-          - runner: windows-11-arm
-            artifact: croncheck-windows-arm64
-            exe: ".exe"
     runs-on: ${{ matrix.runner }}
 
     steps:
