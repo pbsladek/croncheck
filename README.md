@@ -126,11 +126,10 @@ make docker-build DOCKER_TAG=v0.1.0
 make docker-push DOCKER_TAG=v0.1.0
 ```
 
-Tagged releases also publish `pwbsladek/croncheck:<tag>` and
-`pwbsladek/croncheck:latest` from GitHub Actions. Configure repository secrets
-`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` before cutting a release tag. The
-same Docker credentials are used to pull DHI images from `dhi.io` and push the
-final image to Docker Hub.
+Tagged releases publish `pwbsladek/croncheck:<tag>` from GitHub Actions.
+Configure repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` before
+cutting a release tag. The same Docker credentials are used to pull DHI images
+from `dhi.io` and push the final image to Docker Hub.
 
 ## Usage
 
