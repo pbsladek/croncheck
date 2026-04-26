@@ -28,8 +28,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          opam pin add --yes --quiet --no-action --kind=path croncheck .
-          opam install --yes --quiet --deps-only --with-test croncheck
+          opam pin add --yes --no-action --kind=path croncheck .
+          opam install --yes --deps-only --with-test croncheck
 
       - name: Build
         run: opam exec -- make build
@@ -70,7 +70,7 @@ jobs:
           ocaml-compiler: "5.2"
 
       - name: Install formatter
-        run: opam install --yes --quiet dune ocamlformat.0.29.0
+        run: opam install --yes dune ocamlformat.0.29.0
 
       - name: Check formatting
         run: opam exec -- make fmt-check
