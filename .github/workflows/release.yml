@@ -11,6 +11,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  OPAMRETRIES: 3
 
 jobs:
   build-artifacts:
@@ -48,8 +49,8 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          opam pin add --yes --quiet --no-action --kind=path croncheck .
-          opam install --yes --quiet --deps-only --with-test croncheck
+          opam pin add --yes --no-action --kind=path croncheck .
+          opam install --yes --deps-only --with-test croncheck
 
       - name: Build binary
         shell: bash
