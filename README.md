@@ -20,6 +20,9 @@ It can:
 Times are UTC by default. Fixed offsets like `+02:00` and IANA timezone names
 like `America/New_York` are supported with `--tz`.
 
+Full documentation is available in [docs](docs/index.md), with practical
+scenarios in [examples](docs/examples/index.md).
+
 ## Install
 
 ### From GitHub Releases
