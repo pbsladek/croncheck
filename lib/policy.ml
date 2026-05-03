@@ -5,6 +5,7 @@ type rule =
   | DisallowMidnightUtc
 
 type t = rule list
+type config = { rules : t; fail_on : string list option }
 type violation = { job : Job.t; rule : rule; message : string }
 
 let default = []
@@ -23,6 +24,30 @@ let parse_bool raw =
   | "false" | "no" | "off" -> Ok false
   | value -> Error (Printf.sprintf "expected boolean, got %S" value)
 
+let valid_fail_on =
+  [ "all"; "none"; "warnings"; "conflicts"; "overlaps"; "policy" ]
+
+let parse_fail_on line_no value =
+  let categories =
+    value |> String.split_on_char ','
+    |> List.map (fun s -> String.trim (String.lowercase_ascii s))
+    |> List.filter (( <> ) "")
+  in
+  match
+    List.find_opt
+      (fun category -> not (List.mem category valid_fail_on))
+      categories
+  with
+  | Some category ->
+      Error
+        (Printf.sprintf
+           "line %d: unknown fail_on category %S; expected all, none, \
+            warnings, conflicts, overlaps, or policy"
+           line_no category)
+  | None -> Ok (List.sort_uniq String.compare categories)
+
+type parsed_line = Rule of rule option | Fail_on of string list
+
 let parse_rule line_no raw =
   match String.index_opt raw ':' with
   | None -> Error (Printf.sprintf "line %d: expected key: value" line_no)
@@ -32,27 +57,31 @@ let parse_rule line_no raw =
         String.sub raw (idx + 1) (String.length raw - idx - 1) |> trim
       in
       match key with
+      | "fail_on" ->
+          Result.map
+            (fun categories -> Fail_on categories)
+            (parse_fail_on line_no value)
       | "forbid_every_minute" -> (
           match parse_bool value with
-          | Ok true -> Ok (Some ForbidEveryMinute)
-          | Ok false -> Ok None
+          | Ok true -> Ok (Rule (Some ForbidEveryMinute))
+          | Ok false -> Ok (Rule None)
           | Error msg -> Error (Printf.sprintf "line %d: %s" line_no msg))
       | "require_timezone" -> (
           match parse_bool value with
-          | Ok true -> Ok (Some RequireTimezone)
-          | Ok false -> Ok None
+          | Ok true -> Ok (Rule (Some RequireTimezone))
+          | Ok false -> Ok (Rule None)
           | Error msg -> Error (Printf.sprintf "line %d: %s" line_no msg))
       | "max_frequency_per_hour" -> (
           match int_of_string_opt value with
-          | Some n when n >= 0 -> Ok (max_frequency_per_hour n)
+          | Some n when n >= 0 -> Ok (Rule (max_frequency_per_hour n))
           | _ ->
               Error
                 (Printf.sprintf "line %d: expected non-negative integer" line_no)
           )
       | "disallow_midnight_utc" -> (
           match parse_bool value with
-          | Ok true -> Ok (Some DisallowMidnightUtc)
-          | Ok false -> Ok None
+          | Ok true -> Ok (Rule (Some DisallowMidnightUtc))
+          | Ok false -> Ok (Rule None)
           | Error msg -> Error (Printf.sprintf "line %d: %s" line_no msg))
       | _ -> Error (Printf.sprintf "line %d: unknown policy key %S" line_no key)
       )
@@ -69,25 +98,30 @@ let read_lines path =
       in
       loop [])
 
-let parse_file path =
+let parse_config_file path =
   match read_lines path with
   | lines ->
-      let rules, errors =
+      let rules, fail_on, errors =
         lines
         |> List.mapi (fun i line -> (i + 1, trim line))
         |> List.fold_left
-             (fun (rules, errors) (line_no, line) ->
+             (fun (rules, fail_on, errors) (line_no, line) ->
                if line = "" || String.starts_with ~prefix:"#" line then
-                 (rules, errors)
+                 (rules, fail_on, errors)
                else
                  match parse_rule line_no line with
-                 | Ok None -> (rules, errors)
-                 | Ok (Some rule) -> (rule :: rules, errors)
-                 | Error error -> (rules, error :: errors))
-             ([], [])
+                 | Ok (Rule None) -> (rules, fail_on, errors)
+                 | Ok (Rule (Some rule)) -> (rule :: rules, fail_on, errors)
+                 | Ok (Fail_on categories) -> (rules, Some categories, errors)
+                 | Error error -> (rules, fail_on, error :: errors))
+             ([], None, [])
       in
-      if errors = [] then Ok (List.rev rules) else Error (List.rev errors)
+      if errors = [] then Ok { rules = List.rev rules; fail_on }
+      else Error (List.rev errors)
   | exception Sys_error message -> Error [ message ]
+
+let parse_file path =
+  Result.map (fun config -> config.rules) (parse_config_file path)
 
 let field_count field ~min ~max = List.length (Cron.expand field ~min ~max)
 

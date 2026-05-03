@@ -20,6 +20,9 @@ It can:
 Times are UTC by default. Fixed offsets like `+02:00` and IANA timezone names
 like `America/New_York` are supported with `--tz`.
 
+Full documentation is available in [docs](docs/index.md), with practical
+scenarios in [examples](docs/examples/index.md).
+
 ## Install
 
 ### From GitHub Releases
@@ -112,6 +115,9 @@ Build the image locally:
 make docker-build DOCKER_TAG=local
 ```
 
+Set `CRONCHECK_VERSION` when a local image should report a non-dev version in
+`croncheck doctor`.
+
 Run it:
 
 ```sh
@@ -145,8 +151,9 @@ croncheck next "0 0 * * *" --from 2024-01-01      # pin start time
 
 croncheck warn "0 0 31 * *"
 croncheck conflicts "*/5 * * * *" "*/3 * * * *" --window 24h --threshold 0
-croncheck overlaps "* * * * *" --window 60m --duration 120
+croncheck overlaps "* * * * *" --window 60m --duration 120s
 croncheck diff "0 9 * * *" "0 10 * * *" --window 7d
+croncheck doctor --tz America/New_York
 ```
 
 Plain output uses RFC3339 timestamps by default. Use `--time-format human` for
@@ -168,6 +175,7 @@ Analyze multiple schedules:
 
 ```sh
 printf '%s\n' "0 0 * * *" "0 0 31 * *" | croncheck check
+printf '%s\n' "billing-close: 0 0 1 * *" "cache-warm: */15 * * * *" | croncheck check
 croncheck check --from-crontab /etc/crontab --system-crontab
 croncheck check --from-k8s cronjobs.yaml --format json
 croncheck load --from-k8s cronjobs.yaml --window 7d --bucket 5m
@@ -184,6 +192,7 @@ disallow_midnight_utc: true
 EOF
 
 croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy
+croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy --fail-on policy
 ```
 
 Supported syntax:

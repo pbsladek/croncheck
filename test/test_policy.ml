@@ -32,6 +32,38 @@ disallow_midnight_utc: true
       | Ok rules -> Alcotest.(check int) "rules" 3 (List.length rules)
       | Error errors -> Alcotest.fail (String.concat "; " errors))
 
+let test_parse_policy_config_file () =
+  let path =
+    write_temp {|
+fail_on: policy,conflicts
+forbid_every_minute: true
+|}
+  in
+  Fun.protect
+    ~finally:(fun () -> Sys.remove path)
+    (fun () ->
+      match Policy.parse_config_file path with
+      | Ok config ->
+          Alcotest.(check int) "rules" 1 (List.length config.Policy.rules);
+          Alcotest.(check (option (list string)))
+            "fail_on"
+            (Some [ "conflicts"; "policy" ])
+            config.fail_on
+      | Error errors -> Alcotest.fail (String.concat "; " errors))
+
+let test_parse_policy_config_fail_on_error () =
+  let path = write_temp "fail_on: lint\n" in
+  Fun.protect
+    ~finally:(fun () -> Sys.remove path)
+    (fun () ->
+      match Policy.parse_config_file path with
+      | Error [ msg ] ->
+          Alcotest.(check bool)
+            "mentions fail_on" true (String.contains msg '_')
+      | Error errors ->
+          Alcotest.failf "expected one error, got %d" (List.length errors)
+      | Ok _ -> Alcotest.fail "expected error")
+
 let test_parse_policy_error () =
   let path = write_temp "max_frequency_per_hour: nope\n" in
   Fun.protect
@@ -120,6 +152,10 @@ let () =
       ( "parse",
         [
           Alcotest.test_case "policy file" `Quick test_parse_policy_file;
+          Alcotest.test_case "policy config file" `Quick
+            test_parse_policy_config_file;
+          Alcotest.test_case "policy config fail_on error" `Quick
+            test_parse_policy_config_fail_on_error;
           Alcotest.test_case "policy error" `Quick test_parse_policy_error;
         ] );
       ( "evaluate",

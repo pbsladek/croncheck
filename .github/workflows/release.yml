@@ -12,6 +12,8 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   OPAMRETRIES: 3
+  DOCKER_IMAGE: pwbsladek/croncheck
+  DHI_RUNTIME_IMAGE: dhi.io/debian-base:bookworm
 
 jobs:
   build-artifacts:
@@ -51,6 +53,10 @@ jobs:
         run: |
           opam pin add --yes --no-action --kind=path croncheck .
           opam install --yes --deps-only --with-test croncheck
+
+      - name: Substitute version
+        shell: bash
+        run: opam exec -- dune subst
 
       - name: Build binary
         shell: bash
@@ -176,7 +182,7 @@ jobs:
         # docker/metadata-action@v5
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf
         with:
-          images: pwbsladek/croncheck
+          images: ${{ env.DOCKER_IMAGE }}
           tags: |
             type=ref,event=tag
 
@@ -190,6 +196,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            DHI_RUNTIME_IMAGE=dhi.io/debian-base:bookworm
+            DHI_RUNTIME_IMAGE=${{ env.DHI_RUNTIME_IMAGE }}
+            CRONCHECK_VERSION=${{ github.ref_name }}
           provenance: true
           sbom: true

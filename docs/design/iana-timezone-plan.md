@@ -1,3 +1,8 @@
+---
+layout: default
+render_with_liquid: false
+---
+
 # IANA Timezone Support Plan
 
 ## Goal
