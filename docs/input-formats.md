@@ -35,6 +35,19 @@ printf '%s\n' \
 
 Blank lines and comments are ignored.
 
+Stdin entries can also include a label before the expression:
+
+```sh
+printf '%s\n' \
+  "billing-close: 0 0 1 * *" \
+  "cache-warm: */15 * * * *" \
+  | croncheck check
+```
+
+Labels are used in reports for warnings, conflicts, overlaps, policy
+violations, and load summaries. Unlabeled lines continue to work as plain cron
+expressions.
+
 ## Crontab files
 
 Use `--from-crontab PATH`.

@@ -8,6 +8,7 @@ DOCKER_IMAGE ?= pwbsladek/croncheck
 DOCKER_TAG ?= local
 DHI_RUNTIME_IMAGE ?= dhi.io/debian-base:bookworm
 DHI_FIPS_RUNTIME_IMAGE ?= dhi.io/debian-base:bookworm-fips
+CRONCHECK_VERSION ?= dev
 
 ML_SOURCES := $(shell find lib bin test \( -name '*.ml' -o -name '*.mli' \) -print)
 
@@ -57,6 +58,7 @@ run:
 docker-build:
 	$(DOCKER) build \
 	  --build-arg DHI_RUNTIME_IMAGE=$(DHI_RUNTIME_IMAGE) \
+	  --build-arg CRONCHECK_VERSION=$(CRONCHECK_VERSION) \
 	  -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
 docker-run:
@@ -68,6 +70,7 @@ docker-push:
 docker-build-fips:
 	$(DOCKER) build \
 	  --build-arg DHI_RUNTIME_IMAGE=$(DHI_FIPS_RUNTIME_IMAGE) \
+	  --build-arg CRONCHECK_VERSION=$(CRONCHECK_VERSION) \
 	  -t $(DOCKER_IMAGE):$(DOCKER_TAG)-fips .
 
 docker-push-fips:

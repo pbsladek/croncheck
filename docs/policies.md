@@ -20,6 +20,7 @@ forbid_every_minute: true
 require_timezone: true
 max_frequency_per_hour: 12
 disallow_midnight_utc: true
+fail_on: policy,conflicts
 ```
 
 Comments and blank lines are allowed.
@@ -78,7 +79,21 @@ thundering herds.
 ## Exit behavior
 
 Policy violations are findings. `check --policy` exits `1` when any policy
-violation is found.
+violation is found under the active `--fail-on` setting.
+
+To fail only on policy violations while still reporting warnings and conflicts:
+
+```sh
+croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy --fail-on policy
+```
+
+You can also put the default CI failure behavior in the policy file:
+
+```text
+fail_on: policy
+```
+
+The CLI `--fail-on` value takes precedence when both are present.
 
 Parse errors in the policy file exit `2`.
 

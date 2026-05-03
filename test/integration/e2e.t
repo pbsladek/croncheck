@@ -113,7 +113,7 @@ Typo in option name suggests the correct flag.
 Invalid duration unit.
 
   $ croncheck conflicts "*/5 * * * *" "*/3 * * * *" --window 10x 2>&1
-  croncheck: option '--window': duration unit must be one of d, h, or m
+  croncheck: option '--window': duration unit must be one of s, m, h, or d
   Usage: croncheck conflicts [OPTION]… EXPR EXPR
   Try 'croncheck conflicts --help' or 'croncheck --help' for more information.
   [3]
@@ -199,21 +199,21 @@ conflicts: JSON output; option order is flexible.
 
 overlaps: found some and exits 1.
 
-  $ croncheck overlaps "* * * * *" --window 5m --duration 120 | normalize | head -3
+  $ croncheck overlaps "* * * * *" --window 5m --duration 120s | normalize | head -3
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
-  $ croncheck overlaps "* * * * *" --window 5m --duration 120 > /dev/null
+  $ croncheck overlaps "* * * * *" --window 5m --duration 120s > /dev/null
   [1]
 
 overlaps: human format uses readable date and time.
 
-  $ croncheck overlaps "* * * * *" --window 5m --duration 120 --time-format human | normalize | head -1
+  $ croncheck overlaps "* * * * *" --window 5m --duration 120s --time-format human | normalize | head -1
   started DATETIME UTC, next fire DATETIME UTC, overrun by 60s
 
 overlaps: no findings; JSON output.
 
-  $ croncheck overlaps "0 0 * * *" --duration 60 --window 60m --format json
+  $ croncheck overlaps "0 0 * * *" --duration 60s --window 60m --format json
   { "overlaps": [] }
 
 check: stdin with two jobs, one warning.
@@ -404,7 +404,7 @@ conflicts: --from flag pins analysis window start.
 
 overlaps: --from flag pins analysis window start.
 
-  $ croncheck overlaps "* * * * *" --from 2024-01-01 --window 3m --duration 120 | normalize | head -2
+  $ croncheck overlaps "* * * * *" --from 2024-01-01 --window 3m --duration 120s | normalize | head -2
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
   started TIMESTAMP, next fire TIMESTAMP, overrun by 60s
 

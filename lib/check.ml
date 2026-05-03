@@ -15,6 +15,19 @@ type policy_report = {
   policy_violations : Policy.violation list;
 }
 
+type finding_kind = Warnings | Conflicts | Overlaps | Policy
+
+let split_stdin_label line =
+  match String.index_opt line ':' with
+  | None -> (None, line)
+  | Some index ->
+      let label = String.sub line 0 index |> String.trim in
+      let expr =
+        String.sub line (index + 1) (String.length line - index - 1)
+        |> String.trim
+      in
+      if label = "" || expr = "" then (None, line) else (Some label, expr)
+
 let parse_stdin lines =
   let _, jobs, errors =
     List.fold_left
@@ -23,7 +36,8 @@ let parse_stdin lines =
         if line = "" || String.starts_with ~prefix:"#" line then
           (line_no + 1, jobs, errors)
         else
-          match Job.make ~line:line_no ~source:Stdin line with
+          let id, expr = split_stdin_label line in
+          match Job.make ?id ~line:line_no ~source:Stdin expr with
           | Ok job -> (line_no + 1, job :: jobs, errors)
           | Error e ->
               let msg =
@@ -119,3 +133,16 @@ let has_findings report =
 
 let has_policy_findings policy_report =
   has_findings policy_report.report || policy_report.policy_violations <> []
+
+let has_kind report = function
+  | Warnings ->
+      List.exists (fun (_, warnings) -> warnings <> []) report.warnings
+  | Conflicts -> report.conflicts <> []
+  | Overlaps -> report.overlaps <> []
+  | Policy -> false
+
+let has_findings_for kinds report = List.exists (has_kind report) kinds
+
+let has_policy_findings_for kinds policy_report =
+  has_findings_for kinds policy_report.report
+  || (List.mem Policy kinds && policy_report.policy_violations <> [])

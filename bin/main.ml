@@ -52,23 +52,28 @@ let time_format_conv =
 
 let parse_duration s =
   let len = String.length s in
-  if len < 2 then Error (`Msg "expected duration like 30d, 24h, or 60m")
+  if len = 0 then Error (`Msg "expected duration like 30s, 24h, or 7d")
   else
     let unit_char = s.[len - 1] in
-    let number = String.sub s 0 (len - 1) in
+    let number, factor =
+      match unit_char with
+      | 'd' -> (String.sub s 0 (len - 1), 24 * 60 * 60)
+      | 'h' -> (String.sub s 0 (len - 1), 60 * 60)
+      | 'm' -> (String.sub s 0 (len - 1), 60)
+      | 's' -> (String.sub s 0 (len - 1), 1)
+      | '0' .. '9' -> (s, 1)
+      | _ -> ("", 0)
+    in
     let with_unit n factor =
       if n > max_int / factor then Error (`Msg "duration is too large")
       else Ok (n * factor)
     in
-    match int_of_string_opt number with
-    | None -> Error (`Msg "duration number must be an integer")
-    | Some n when n < 0 -> Error (`Msg "duration must be non-negative")
-    | Some n -> (
-        match unit_char with
-        | 'd' -> with_unit n (24 * 60 * 60)
-        | 'h' -> with_unit n (60 * 60)
-        | 'm' -> with_unit n 60
-        | _ -> Error (`Msg "duration unit must be one of d, h, or m"))
+    if factor = 0 then Error (`Msg "duration unit must be one of s, m, h, or d")
+    else
+      match int_of_string_opt number with
+      | None -> Error (`Msg "duration number must be an integer")
+      | Some n when n < 0 -> Error (`Msg "duration must be non-negative")
+      | Some n -> with_unit n factor
 
 let duration_conv =
   let print ppf seconds = Format.fprintf ppf "%ds" seconds in
@@ -87,7 +92,6 @@ let non_negative_int_conv name =
 
 let count_conv = non_negative_int_conv "count"
 let threshold_conv = non_negative_int_conv "threshold"
-let seconds_duration_conv = non_negative_int_conv "duration"
 
 let timezone_conv =
   let parse raw =
@@ -154,6 +158,60 @@ let add_seconds t seconds =
 
 let exit_for_findings found = if found then 1 else 0
 
+let all_finding_kinds =
+  [
+    Croncheck_lib.Check.Warnings;
+    Croncheck_lib.Check.Conflicts;
+    Croncheck_lib.Check.Overlaps;
+    Croncheck_lib.Check.Policy;
+  ]
+
+let parse_fail_on_names names =
+  let parse_one = function
+    | "all" -> Ok all_finding_kinds
+    | "none" -> Ok []
+    | "warnings" -> Ok [ Croncheck_lib.Check.Warnings ]
+    | "conflicts" -> Ok [ Croncheck_lib.Check.Conflicts ]
+    | "overlaps" -> Ok [ Croncheck_lib.Check.Overlaps ]
+    | "policy" -> Ok [ Croncheck_lib.Check.Policy ]
+    | other ->
+        Error
+          (`Msg
+             (Printf.sprintf
+                "unknown finding category %S; expected all, none, warnings, \
+                 conflicts, overlaps, or policy"
+                other))
+  in
+  names
+  |> List.fold_left
+       (fun acc item ->
+         match (acc, parse_one item) with
+         | (Error _ as error), _ -> error
+         | _, (Error _ as error) -> error
+         | Ok acc, Ok kinds -> Ok (List.rev_append kinds acc))
+       (Ok [])
+  |> Result.map (List.sort_uniq compare)
+
+let fail_on_conv =
+  let parse raw =
+    raw |> String.split_on_char ','
+    |> List.map (fun s -> String.trim (String.lowercase_ascii s))
+    |> List.filter (( <> ) "")
+    |> parse_fail_on_names
+  in
+  let name = function
+    | Croncheck_lib.Check.Warnings -> "warnings"
+    | Croncheck_lib.Check.Conflicts -> "conflicts"
+    | Croncheck_lib.Check.Overlaps -> "overlaps"
+    | Croncheck_lib.Check.Policy -> "policy"
+  in
+  let print ppf kinds =
+    if List.length kinds = List.length all_finding_kinds then
+      Format.pp_print_string ppf "all"
+    else Format.pp_print_string ppf (kinds |> List.map name |> String.concat ",")
+  in
+  Arg.conv (parse, print)
+
 let read_stdin_lines () =
   let rec loop acc =
     match input_line stdin with
@@ -163,8 +221,23 @@ let read_stdin_lines () =
   loop []
 
 let check_cmd =
+  let effective_fail_on ~cli ~policy =
+    match cli with
+    | Some fail_on -> fail_on
+    | None ->
+        (match policy with
+          | Some policy -> (
+              match policy.Croncheck_lib.Policy.fail_on with
+              | None -> None
+              | Some names -> (
+                  match parse_fail_on_names names with
+                  | Ok fail_on -> Some fail_on
+                  | Error _ -> None))
+          | None -> None)
+        |> Option.value ~default:all_finding_kinds
+  in
   let run format time_format timezone window threshold duration policy_path
-      from_crontab system_crontab from_k8s from_opt =
+      fail_on_opt from_crontab system_crontab from_k8s from_opt =
     run_with_time_format format time_format (fun () ->
         let selected =
           List.filter_map Fun.id
@@ -197,27 +270,37 @@ let check_cmd =
               let until = add_seconds from window in
               match policy_path with
               | None ->
+                  let fail_on =
+                    effective_fail_on ~cli:fail_on_opt ~policy:None
+                  in
                   let report =
                     Croncheck_lib.Check.analyze ~timezone ~from ~until
                       ~threshold ~duration jobs
                   in
                   Croncheck_lib.Output.pp_check ~timezone Format.std_formatter
                     ~format ~time_format report;
-                  exit_for_findings (Croncheck_lib.Check.has_findings report)
+                  exit_for_findings
+                    (Croncheck_lib.Check.has_findings_for fail_on report)
               | Some path -> (
-                  match Croncheck_lib.Policy.parse_file path with
+                  match Croncheck_lib.Policy.parse_config_file path with
                   | Error errors ->
                       print_input_errors errors;
                       2
-                  | Ok policy ->
+                  | Ok policy_config ->
+                      let fail_on =
+                        effective_fail_on ~cli:fail_on_opt
+                          ~policy:(Some policy_config)
+                      in
                       let report =
                         Croncheck_lib.Check.analyze_with_policy ~timezone ~from
-                          ~until ~threshold ~duration ~policy jobs
+                          ~until ~threshold ~duration
+                          ~policy:policy_config.rules jobs
                       in
                       Croncheck_lib.Output.pp_check_with_policy ~timezone
                         Format.std_formatter ~format ~time_format report;
                       exit_for_findings
-                        (Croncheck_lib.Check.has_policy_findings report))))
+                        (Croncheck_lib.Check.has_policy_findings_for fail_on
+                           report))))
   in
   let term =
     Term.(
@@ -255,6 +338,13 @@ let check_cmd =
           & opt (some string) None
           & info [ "policy" ]
               ~doc:"Read CI policy checks from a simple key-value file.")
+      $ Arg.(
+          value
+          & opt (some fail_on_conv) None
+          & info [ "fail-on" ]
+              ~doc:
+                "Comma-separated finding categories that should exit 1: all, \
+                 none, warnings, conflicts, overlaps, policy.")
       $ Arg.(
           value
           & opt (some string) None
@@ -558,9 +648,8 @@ let overlaps_cmd =
           & opt duration_conv (24 * 60 * 60)
           & info [ "window" ] ~doc:"Search window, e.g. 30d, 24h, 60m.")
       $ Arg.(
-          value
-          & opt seconds_duration_conv 60
-          & info [ "duration" ] ~doc:"Assumed job duration in seconds.")
+          value & opt duration_conv 60
+          & info [ "duration" ] ~doc:"Assumed job duration, e.g. 30s or 5m.")
       $ from_arg
       $ Arg.(required & pos 0 (some string) None & info [] ~docv:"EXPR"))
   in
@@ -648,6 +737,70 @@ let explain_cmd =
     (Cmd.info "explain" ~doc:"Describe a cron expression in plain English.")
     term
 
+let doctor_cmd =
+  let run timezone_name =
+    let root_status root =
+      let available =
+        try Sys.file_exists root && Sys.is_directory root
+        with Sys_error _ -> false
+      in
+      Printf.sprintf "  - %s: %s" root
+        (if available then "available" else "missing")
+    in
+    let parsed = Croncheck_lib.Timezone.parse timezone_name in
+    Format.printf "croncheck doctor@.";
+    Format.printf "version: %s@." Croncheck_lib.Version.current;
+    Format.printf "os: %s@." Sys.os_type;
+    Format.printf "zoneinfo roots:@.";
+    List.iter
+      (fun root -> Format.printf "%s@." (root_status root))
+      Croncheck_lib.Timezone.zoneinfo_roots;
+    Format.printf "timezone probe: %s@." timezone_name;
+    (match parsed with
+    | Ok timezone -> (
+        let kind =
+          match timezone with
+          | Croncheck_lib.Timezone.Utc -> "utc"
+          | Croncheck_lib.Timezone.Fixed_offset _ -> "fixed-offset"
+          | Croncheck_lib.Timezone.Iana _ -> "iana"
+        in
+        Format.printf "timezone status: ok (%s)@." kind;
+        Format.printf "timezone normalized: %s@."
+          (Croncheck_lib.Timezone.to_string timezone);
+        let zoneinfo_path =
+          match timezone with
+          | Croncheck_lib.Timezone.Iana _ ->
+              Croncheck_lib.Timezone.zoneinfo_path timezone_name
+          | Croncheck_lib.Timezone.Utc | Croncheck_lib.Timezone.Fixed_offset _
+            ->
+              None
+        in
+        match zoneinfo_path with
+        | Some path -> Format.printf "zoneinfo file: %s@." path
+        | None -> Format.printf "zoneinfo file: n/a@.")
+    | Error message ->
+        Format.printf "timezone status: unavailable@.";
+        Format.printf "timezone error: %s@." message;
+        Format.printf
+          "hint: install tzdata or use a runtime image that includes \
+           /usr/share/zoneinfo for IANA timezone support@.");
+    0
+  in
+  let term =
+    Term.(
+      const run
+      $ Arg.(
+          value
+          & opt string "America/New_York"
+          & info [ "tz" ]
+              ~doc:
+                "Timezone probe for diagnostics; defaults to America/New_York."))
+  in
+  Cmd.v
+    (Cmd.info "doctor"
+       ~doc:"Print runtime diagnostics for timezone and container setup.")
+    term
+
 let () =
   let info =
     Cmd.info "croncheck"
@@ -664,6 +817,7 @@ let () =
         load_cmd;
         check_cmd;
         explain_cmd;
+        doctor_cmd;
       ]
   in
   let code =

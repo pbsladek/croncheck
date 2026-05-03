@@ -15,6 +15,8 @@ type policy_report = {
   policy_violations : Policy.violation list;
 }
 
+type finding_kind = Warnings | Conflicts | Overlaps | Policy
+
 val load : source -> (Job.t list, string list) result
 
 val analyze :
@@ -38,3 +40,5 @@ val analyze_with_policy :
 
 val has_findings : report -> bool
 val has_policy_findings : policy_report -> bool
+val has_findings_for : finding_kind list -> report -> bool
+val has_policy_findings_for : finding_kind list -> policy_report -> bool

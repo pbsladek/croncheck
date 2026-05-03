@@ -45,7 +45,7 @@ If a job can run longer than its schedule interval, it may overlap with itself.
 ```sh
 croncheck overlaps "*/10 * * * *" \
   --window 24h \
-  --duration 900
+  --duration 900s
 ```
 
 This example assumes a 15-minute duration for a job scheduled every 10 minutes.

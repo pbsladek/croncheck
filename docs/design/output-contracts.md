@@ -51,6 +51,23 @@ The CLI distinguishes invalid execution from valid schedules with findings:
 
 New commands should follow this convention.
 
+For `check`, `--fail-on` can choose which finding categories produce exit code
+`1`. This must not filter report contents; it only controls the command status.
+
+## Doctor output
+
+`doctor` is a diagnostic command for runtime setup. It should stay human-readable
+and focused on environment facts:
+
+- version marker;
+- host OS type;
+- zoneinfo search paths;
+- timezone probe parse status;
+- resolved zoneinfo file for IANA probes when available.
+
+The command should avoid failing just because an optional IANA probe is missing;
+its purpose is to explain the environment.
+
 ## Error printing
 
 Low-level modules return errors. The CLI prints:
@@ -61,4 +78,3 @@ Low-level modules return errors. The CLI prints:
 
 This keeps library code reusable and prevents analysis modules from depending on
 terminal behavior.
-

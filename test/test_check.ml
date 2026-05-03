@@ -29,6 +29,15 @@ let test_load_stdin_skips_blank_and_comments () =
   | Ok jobs -> Alcotest.failf "expected one job, got %d" (List.length jobs)
   | Error _ -> Alcotest.fail "expected success"
 
+let test_load_stdin_named_job () =
+  match Check.load (Check.Stdin [ "billing-close: 0 0 1 * *" ]) with
+  | Ok [ job ] ->
+      Alcotest.(check (option string)) "id" (Some "billing-close") job.Job.id;
+      Alcotest.(check string) "expr" "0 0 1 * *" job.Job.expr_raw;
+      Alcotest.(check string) "label" "stdin:1 billing-close" (Job.label job)
+  | Ok jobs -> Alcotest.failf "expected one job, got %d" (List.length jobs)
+  | Error _ -> Alcotest.fail "expected success"
+
 let test_load_stdin_parse_error () =
   match Check.load (Check.Stdin [ "60 * * * *" ]) with
   | Error [ msg ] ->
@@ -148,6 +157,39 @@ let test_has_findings_clean () =
   in
   Alcotest.(check bool) "no findings" false (Check.has_findings report)
 
+let test_has_findings_for_selected_categories () =
+  let jobs = [ job_of_expr "0 0 31 * *" ] in
+  let from = time 2024 1 1 0 0 in
+  let until = time 2024 2 1 0 0 in
+  let report =
+    Check.analyze ~timezone:Timezone.utc ~from ~until ~threshold:0
+      ~duration:None jobs
+  in
+  Alcotest.(check bool)
+    "warnings selected" true
+    (Check.has_findings_for [ Check.Warnings ] report);
+  Alcotest.(check bool)
+    "conflicts ignored" false
+    (Check.has_findings_for [ Check.Conflicts ] report);
+  Alcotest.(check bool) "none selected" false (Check.has_findings_for [] report)
+
+let test_has_policy_findings_for_selected_categories () =
+  let jobs = [ job_of_expr "0 0 * * *" ] in
+  let from = time 2024 1 1 0 0 in
+  let until = time 2024 1 2 0 0 in
+  let policy_report =
+    Check.analyze_with_policy ~timezone:Timezone.utc ~from ~until ~threshold:0
+      ~duration:None
+      ~policy:[ Policy.require_timezone ]
+      jobs
+  in
+  Alcotest.(check bool)
+    "policy selected" true
+    (Check.has_policy_findings_for [ Check.Policy ] policy_report);
+  Alcotest.(check bool)
+    "warnings ignored" false
+    (Check.has_policy_findings_for [ Check.Warnings ] policy_report)
+
 let () =
   Alcotest.run "check"
     [
@@ -156,6 +198,7 @@ let () =
           Alcotest.test_case "two jobs" `Quick test_load_stdin_two_jobs;
           Alcotest.test_case "skips blank and comments" `Quick
             test_load_stdin_skips_blank_and_comments;
+          Alcotest.test_case "named job" `Quick test_load_stdin_named_job;
           Alcotest.test_case "parse error" `Quick test_load_stdin_parse_error;
         ] );
       ( "load-crontab",
@@ -183,5 +226,9 @@ let () =
           Alcotest.test_case "with warnings" `Quick
             test_has_findings_with_warnings;
           Alcotest.test_case "clean" `Quick test_has_findings_clean;
+          Alcotest.test_case "selected categories" `Quick
+            test_has_findings_for_selected_categories;
+          Alcotest.test_case "selected policy categories" `Quick
+            test_has_policy_findings_for_selected_categories;
         ] );
     ]

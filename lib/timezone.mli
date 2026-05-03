@@ -13,3 +13,5 @@ val instants_of_local_date_time : t -> Ptime.date * Ptime.time -> Ptime.t list
 val is_dst_observing : t -> bool
 val to_string : t -> string
 val parse : string -> (t, string) result
+val zoneinfo_roots : string list
+val zoneinfo_path : string -> string option

@@ -427,6 +427,9 @@ let find_zone_file name =
       else None)
     zoneinfo_roots
 
+let zoneinfo_path name =
+  if valid_iana_name name then find_zone_file name else None
+
 let load_iana name =
   match Hashtbl.find_opt cache name with
   | Some result -> result

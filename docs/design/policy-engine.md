@@ -41,10 +41,15 @@ forbid_every_minute: true
 require_timezone: true
 max_frequency_per_hour: 12
 disallow_midnight_utc: true
+fail_on: policy,conflicts
 ```
 
 The format is deliberately small. Unsupported keys and invalid values should
 produce clear parse errors rather than being ignored.
+
+`fail_on` is policy-file execution configuration, not a rule. It lets CI encode
+which finding categories should fail by convention while preserving the CLI
+override for one-off runs.
 
 ## Bounded evaluation
 
@@ -74,4 +79,3 @@ parsed fields and schedule behavior.
 Warnings are advisory findings for valid schedules. Policy violations are
 organization-specific failures. The check command reports both when policy is
 enabled and exits non-zero if either class of finding exists.
-

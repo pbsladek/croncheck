@@ -36,6 +36,19 @@ to humans.
 `Check.load` normalizes all sources to `Job.t list` or a list of user-facing
 input errors.
 
+## Stdin labels
+
+Stdin supports either a bare expression or a label followed by a colon:
+
+```text
+0 0 * * *
+billing-close: 0 0 1 * *
+```
+
+When a label is present, it becomes `Job.id` and the text after the colon is
+parsed as the cron expression. Labels are intentionally limited to stdin
+normalization; cron parsing itself remains unaware of labels.
+
 ## Crontab parsing
 
 Crontab parsing should preserve line-numbered diagnostics. It supports normal
@@ -76,4 +89,3 @@ allowing raw stdin expressions to be analyzed under a chosen timezone.
 Parsers return structured source-specific errors. `Check.load` converts them to
 strings for the CLI boundary. Lower-level modules should avoid printing or
 exiting directly.
-

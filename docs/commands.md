@@ -84,13 +84,13 @@ Important options:
 Find self-overlaps for a job with an expected duration.
 
 ```sh
-croncheck overlaps "* * * * *" --window 60m --duration 120
-croncheck overlaps "*/10 * * * *" --window 24h --duration 900
+croncheck overlaps "* * * * *" --window 60m --duration 120s
+croncheck overlaps "*/10 * * * *" --window 24h --duration 900s
 ```
 
 Important options:
 
-- `--duration`: assumed job duration in seconds.
+- `--duration`: assumed job duration, such as `30s`, `5m`, or `1h`.
 - `--window`: analysis duration.
 
 ## `diff`
@@ -119,6 +119,7 @@ printf '%s\n' "0 0 * * *" "0 0 31 * *" | croncheck check
 croncheck check --from-crontab /etc/crontab --system-crontab
 croncheck check --from-k8s cronjobs.yaml --format json
 croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy
+croncheck check --from-k8s cronjobs.yaml --fail-on policy,conflicts
 ```
 
 Important options:
@@ -127,11 +128,16 @@ Important options:
 - `--system-crontab`: parse crontab as system format with a user column.
 - `--from-k8s PATH`: read Kubernetes CronJob YAML.
 - `--policy PATH`: enforce policy checks.
+- `--fail-on CATEGORIES`: choose which findings exit `1`.
 - `--duration`: optional job duration for overlap analysis.
 - `--window`: analysis duration.
 
 Only one input source can be selected. If no input source is selected, `check`
 reads expressions from stdin.
+
+`--fail-on` accepts a comma-separated list of `warnings`, `conflicts`,
+`overlaps`, and `policy`. `all` is the default. `none` reports findings without
+failing the command.
 
 ## `load`
 
@@ -150,3 +156,24 @@ Important options:
 
 Use `load` to identify thundering-herd risk, such as many CronJobs firing at
 the same minute.
+
+## `doctor`
+
+Print runtime diagnostics for timezone and container setup.
+
+```sh
+croncheck doctor
+croncheck doctor --tz America/New_York
+croncheck doctor --tz UTC
+```
+
+The output includes:
+
+- croncheck version marker.
+- host OS type.
+- zoneinfo search paths and whether they are present.
+- parse status for the timezone probe.
+- resolved zoneinfo file when the probe is an IANA timezone.
+
+Use this when debugging timezone behavior in local environments or minimal
+container images.

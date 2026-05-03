@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1
 
-ARG OCAML_BUILDER_IMAGE=ocaml/opam:debian-12-ocaml-4.14
+ARG OCAML_BUILDER_IMAGE=ocaml/opam:debian-12-ocaml-5.2
 ARG DHI_RUNTIME_IMAGE=dhi.io/debian-base:bookworm
+ARG CRONCHECK_VERSION=dev
 
 FROM ${OCAML_BUILDER_IMAGE} AS build
+ARG CRONCHECK_VERSION=dev
 
 WORKDIR /src
 
@@ -11,6 +13,9 @@ COPY --chown=opam:opam dune-project croncheck.opam ./
 RUN opam install --yes --deps-only --with-test .
 
 COPY --chown=opam:opam . .
+RUN if [ "${CRONCHECK_VERSION}" != "dev" ]; then \
+      sed -i "s/%%VERSION%%/${CRONCHECK_VERSION}/g" lib/version.ml; \
+    fi
 RUN opam exec -- dune build --profile release bin/main.exe
 RUN cp _build/default/bin/main.exe /tmp/croncheck
 

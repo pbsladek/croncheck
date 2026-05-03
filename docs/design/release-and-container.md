@@ -43,7 +43,8 @@ verifies the checksum, extracts it, and smoke tests the extracted binary.
 
 The Dockerfile uses a multi-stage build:
 
-- OCaml/opam builder image for compilation.
+- OCaml/opam builder image for compilation, aligned with the release artifact
+  compiler.
 - DHI Debian base runtime image for the final image.
 
 The runtime image copies:
@@ -52,6 +53,8 @@ The runtime image copies:
 - `/usr/share/zoneinfo` from the builder.
 
 Zoneinfo is included so IANA timezone support works inside the container.
+Release builds pass `CRONCHECK_VERSION` so `croncheck doctor` reports the tag
+instead of the local development fallback.
 
 ## Multi-arch container publishing
 
@@ -83,4 +86,3 @@ Docker builds enable:
 Actions are pinned by commit SHA in release and pages workflows. New workflow
 steps should keep that convention unless there is a deliberate reason to change
 it.
-

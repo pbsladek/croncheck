@@ -31,6 +31,16 @@ croncheck check --from-k8s cronjobs.yaml \
 The command exits `1` if warnings, conflicts, overlaps, or policy violations
 are found.
 
+When introducing the tool gradually, fail only on policy violations while still
+printing other findings:
+
+```sh
+croncheck check --from-k8s cronjobs.yaml \
+  --policy croncheck.policy \
+  --window 30d \
+  --fail-on policy
+```
+
 ## Use Docker in CI without installing OCaml
 
 Use the published Docker image when the CI job only needs the CLI.

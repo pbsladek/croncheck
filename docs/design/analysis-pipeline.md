@@ -83,7 +83,16 @@ list of behavioral differences.
 
 ## Exit behavior
 
-The CLI treats findings as actionable. Aggregate checks exit non-zero when
-warnings, conflicts, overlaps, or policy violations exist. Parse and input
-errors use a separate error path from valid schedules with findings.
+The CLI treats findings as actionable by default. Aggregate checks exit
+non-zero when warnings, conflicts, overlaps, or policy violations exist.
 
+`--fail-on` can narrow that behavior to selected categories:
+
+- warnings;
+- conflicts;
+- overlaps;
+- policy.
+
+The report still includes all findings. `--fail-on` only changes the exit code.
+Parse and input errors use a separate error path from valid schedules with
+findings.

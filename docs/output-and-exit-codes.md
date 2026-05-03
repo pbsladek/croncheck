@@ -42,12 +42,37 @@ machine consumers receive stable timestamps.
 - `2`: cron parse error or input parse error.
 - `3`: usage error.
 
+For `check`, use `--fail-on` to choose which findings should produce exit code
+`1`:
+
+```sh
+croncheck check --from-k8s cronjobs.yaml --fail-on policy,conflicts
+croncheck check --from-k8s cronjobs.yaml --fail-on none
+```
+
+Accepted categories are `warnings`, `conflicts`, `overlaps`, and `policy`.
+`all` is the default, and `none` reports findings without failing.
+
+Policy files may also set a default:
+
+```text
+fail_on: policy,conflicts
+```
+
+The CLI flag takes precedence over the policy-file value.
+
 ## CI patterns
 
 Fail a pull request when schedule findings exist:
 
 ```sh
 croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy
+```
+
+Introduce croncheck gradually by failing only on selected categories:
+
+```sh
+croncheck check --from-k8s cronjobs.yaml --policy croncheck.policy --fail-on policy
 ```
 
 Produce machine-readable findings:
