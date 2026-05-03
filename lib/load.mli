@@ -1,4 +1,5 @@
 type job_count = private { job : Job.t; fires : int }
+(** Number of fires contributed by one job to a load bucket. *)
 
 type bucket = private {
   start : Ptime.t;
@@ -13,6 +14,8 @@ type report = {
   bucket_seconds : int;
   buckets : bucket list;
 }
+(** Bucketed fire counts over a bounded window. Buckets with no fires are
+    omitted from [buckets]. *)
 
 val analyze :
   timezone:Timezone.t ->
@@ -21,5 +24,8 @@ val analyze :
   bucket_seconds:int ->
   Job.t list ->
   report
+(** Group job fire times into fixed-width buckets measured from [from]. *)
 
 val busiest : ?limit:int -> report -> bucket list
+(** Return buckets with the largest fire counts, keeping a deterministic order
+    for ties. *)
