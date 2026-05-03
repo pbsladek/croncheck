@@ -14,6 +14,8 @@ let zoneinfo_roots =
 let cache : (string, (iana, string) result) Hashtbl.t = Hashtbl.create 16
 
 let valid_iana_name name =
+  (* Zone names are relative paths under a trusted zoneinfo root.  Disallow
+     absolute paths, parent traversal, and platform path separators. *)
   let len = String.length name in
   let valid_char = function
     | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' | '-' | '+' | '/' -> true
@@ -100,6 +102,9 @@ let block_len header time_size =
 let ptime_of_epoch_s seconds = Ptime.of_span (Ptime.Span.of_int_s seconds)
 
 let parse_block data pos header time_size =
+  (* A TZif data block stores transition times, type indexes, and ttinfo
+     records separately.  Convert each transition directly to the offset active
+     after that transition. *)
   if header.typecnt <= 0 then Error "timezone has no local time types"
   else
     let needed = pos + block_len header time_size in
@@ -254,6 +259,9 @@ let parse_rule s pos =
       else Some ({ date_rule; time_s = 2 * 3600 }, pos)
 
 let parse_posix_tail s =
+  (* TZif v2/v3 files may end with a POSIX rule that projects transitions past
+     the explicit table.  Only the subset needed for future DST transitions is
+     interpreted here. *)
   let len = String.length s in
   match skip_tz_name s 0 with
   | None -> None
@@ -353,6 +361,8 @@ let year_of_time t =
   year
 
 let future_transitions_from_tail block tail =
+  (* Extend finite TZif tables so schedules remain useful for future dates.  The
+     hard stop keeps enumeration bounded even if a malformed tail slips through. *)
   let last_transition =
     match List.rev block.block_transitions with
     | [] -> None
@@ -456,6 +466,9 @@ let offset_seconds_at timezone t =
   | Utc -> 0
   | Fixed_offset seconds -> seconds
   | Iana zone ->
+      (* Transition lists are sorted by instant.  The current offset is the last
+         transition not after [t], falling back to the first type if no
+         transition has occurred yet. *)
       let rec loop current = function
         | [] -> current
         | transition :: rest ->
@@ -486,6 +499,9 @@ let same_local_date_time timezone (expected_date, (expected_clock, _)) t =
   date = expected_date && clock = expected_clock
 
 let instants_of_local_date_time timezone ((date, (clock, _)) as local) =
+  (* Try every observed offset and keep the instants that round-trip to the
+     requested wall time.  This naturally models gaps and folds without
+     special-casing individual DST rules. *)
   let offsets =
     match timezone with
     | Utc -> [ 0 ]

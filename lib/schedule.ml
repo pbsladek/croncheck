@@ -62,6 +62,8 @@ let day_matches compiled ~dom ~dow =
   let dom_match = set_mem compiled.doms dom in
   let dow_match = dow_mem compiled.dows dow in
   match compiled.day_rule with
+  (* POSIX cron ORs restricted day-of-month and day-of-week fields.  Quartz
+     makes the choice explicit with [?], so restricted fields combine by AND. *)
   | Posix_day { dom_any = true; dow_any = true } -> true
   | Posix_day { dom_any = true; _ } -> dow_match
   | Posix_day { dow_any = true; _ } -> dom_match
@@ -72,6 +74,9 @@ let day_matches compiled ~dom ~dow =
   | Quartz_day _ -> dom_match && dow_match
 
 let possible compiled =
+  (* Reject schedules whose month/day/year constraints cannot form a valid
+     local midnight.  A 400-year sample is enough for Gregorian calendar
+     periodicity when no Quartz year field bounds the search. *)
   let years =
     match compiled.years with
     | Some years -> years.members
@@ -173,6 +178,9 @@ let after_last_year compiled t =
           year > last_year)
 
 let next_minute_after timezone t =
+  (* Advance by wall-clock minute, not by exactly sixty real seconds.  Around
+     DST transitions the next local minute may map to zero, one, or two
+     instants; select the first real instant strictly after [t]. *)
   match add_seconds t 60 with
   | None -> None
   | Some bumped ->
@@ -182,6 +190,8 @@ let next_minute_after timezone t =
       |> List.find_opt (fun candidate -> Ptime.compare candidate t > 0)
 
 let minute_start timezone t =
+  (* Return the local minute containing [t].  In a fold there can be two real
+     starts for the same wall minute, so keep the one that is not after [t]. *)
   let date, ((hour, minute, _), _) = date_time timezone t in
   Timezone.instants_of_local_date_time timezone (date, ((hour, minute, 0), 0))
   |> List.find_opt (fun candidate -> Ptime.compare candidate t <= 0)
@@ -208,6 +218,8 @@ let fire_times_compiled compiled ~from =
   else
     match compiled.seconds with
     | None ->
+        (* POSIX schedules only fire at second zero, so minute stepping is both
+           sufficient and cheaper than probing every second. *)
         let rec loop cursor () =
           match next_minute_after compiled.timezone cursor with
           | None -> Seq.Nil
@@ -219,6 +231,9 @@ let fire_times_compiled compiled ~from =
         in
         loop from
     | Some seconds ->
+        (* Quartz schedules can fire multiple times inside one matching minute.
+           Keep pending candidates for the current minute before advancing to the
+           next matching wall minute. *)
         let rec matching_minute cursor =
           match next_minute_after compiled.timezone cursor with
           | None -> None

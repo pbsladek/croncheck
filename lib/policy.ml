@@ -28,6 +28,8 @@ let valid_fail_on =
   [ "all"; "none"; "warnings"; "conflicts"; "overlaps"; "policy" ]
 
 let parse_fail_on line_no value =
+  (* Keep policy-file execution settings in their textual form.  The CLI layer
+     owns the mapping to [Check.finding_kind], avoiding a dependency cycle. *)
   let categories =
     value |> String.split_on_char ','
     |> List.map (fun s -> String.trim (String.lowercase_ascii s))
@@ -126,6 +128,8 @@ let parse_file path =
 let field_count field ~min ~max = List.length (Cron.expand field ~min ~max)
 
 let field_covers field ~min ~max =
+  (* Use semantic expansion rather than raw syntax so equivalent schedules such
+     as [*], [*/1], and a complete explicit range behave the same. *)
   let values = Cron.expand field ~min ~max in
   List.for_all
     (fun n -> List.mem n values)
@@ -172,6 +176,8 @@ let effective_timezone fallback job =
   Option.value job.Job.timezone ~default:fallback
 
 let fires_at_midnight_utc ~timezone ~from ~until job =
+  (* Scan only the active analysis window.  A midnight outside the window should
+     not make this CI run fail. *)
   let rec loop seq =
     match seq () with
     | Seq.Nil -> false
