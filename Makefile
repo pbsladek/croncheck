@@ -24,12 +24,10 @@ integration-test:
 	$(DUNE) test test/integration
 
 coverage:
-	$(DUNE) build --instrument-with bisect_ppx
-	rm -f bisect*.coverage
-	$(foreach exe,$(wildcard _build/default/test/test_*.exe),\
-	  BISECT_FILE=$(CURDIR)/bisect $(exe) 2>/dev/null;)
-	bisect-ppx-report html
-	bisect-ppx-report summary
+	if [ -d _build ]; then find _build -name '*.coverage' -type f -delete; fi
+	BISECT_FILE=$(CURDIR)/_build/bisect $(DUNE) runtest --force --instrument-with bisect_ppx
+	bisect-ppx-report html --coverage-path _build
+	bisect-ppx-report summary --coverage-path _build
 
 opam-lint:
 	$(OPAM) lint croncheck.opam

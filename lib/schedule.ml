@@ -190,15 +190,23 @@ let next_minute_after timezone t =
       |> List.find_opt (fun candidate -> Ptime.compare candidate t > 0)
 
 let minute_start timezone t =
-  (* Return the local minute containing [t].  In a fold there can be two real
-     starts for the same wall minute, so keep the one that is not after [t]. *)
+  (* In a fold, select the latest start not after [t] to stay in the same
+     occurrence of the local minute. *)
   let date, ((hour, minute, _), _) = date_time timezone t in
   Timezone.instants_of_local_date_time timezone (date, ((hour, minute, 0), 0))
+  |> List.rev
   |> List.find_opt (fun candidate -> Ptime.compare candidate t <= 0)
 
 let time_in_minute timezone minute second =
   let date, ((hour, min, _), _) = date_time timezone minute in
+  (* Keep the other occurrence of a folded local minute out of this batch. *)
   Timezone.instants_of_local_date_time timezone (date, ((hour, min, second), 0))
+  |> List.filter (fun candidate ->
+      Ptime.compare candidate minute >= 0
+      && Ptime.Span.compare
+           (Ptime.diff candidate minute)
+           (Ptime.Span.of_int_s 60)
+         < 0)
 
 let minute_matches compiled t =
   let (year, month, dom), ((hour, minute, _), _tz) =
@@ -213,8 +221,11 @@ let minute_matches compiled t =
   && year_match
   && day_matches compiled ~dom ~dow:(dow compiled.timezone t)
 
-let fire_times_compiled compiled ~from =
-  if not compiled.possible then Seq.empty
+let fire_times_compiled ?until compiled ~from =
+  let beyond_until t =
+    match until with None -> false | Some until -> Ptime.compare t until > 0
+  in
+  if (not compiled.possible) || beyond_until from then Seq.empty
   else
     match compiled.seconds with
     | None ->
@@ -224,7 +235,8 @@ let fire_times_compiled compiled ~from =
           match next_minute_after compiled.timezone cursor with
           | None -> Seq.Nil
           | Some candidate ->
-              if after_last_year compiled candidate then Seq.Nil
+              if beyond_until candidate || after_last_year compiled candidate
+              then Seq.Nil
               else if matches_compiled compiled candidate then
                 Seq.Cons (candidate, loop candidate)
               else loop candidate ()
@@ -238,14 +250,17 @@ let fire_times_compiled compiled ~from =
           match next_minute_after compiled.timezone cursor with
           | None -> None
           | Some minute ->
-              if after_last_year compiled minute then None
+              if beyond_until minute || after_last_year compiled minute then
+                None
               else if minute_matches compiled minute then Some minute
               else matching_minute minute
         in
         let candidates_after cursor minute =
           seconds.members
           |> List.concat_map (time_in_minute compiled.timezone minute)
-          |> List.filter (fun t -> Ptime.compare t cursor > 0)
+          |> List.filter (fun t ->
+              Ptime.compare t cursor > 0 && not (beyond_until t))
+          |> List.sort_uniq Ptime.compare
         in
         let rec loop cursor pending () =
           match pending with
@@ -261,7 +276,7 @@ let fire_times_compiled compiled ~from =
               else
                 match matching_minute cursor with
                 | None -> Seq.Nil
-                | Some minute -> loop cursor (candidates_after cursor minute) ()
+                | Some minute -> loop minute (candidates_after cursor minute) ()
               )
         in
         loop from []
@@ -276,9 +291,9 @@ let count_within ?limit compiled ~from ~until =
         | Seq.Cons (t, tail) ->
             if Ptime.compare t until > 0 then count else loop (count + 1) tail)
   in
-  loop 0 (fire_times_compiled compiled ~from)
+  loop 0 (fire_times_compiled ~until compiled ~from)
 
-let next_n_compiled compiled ~from n =
+let next_n_compiled ?until compiled ~from n =
   if n <= 0 then []
   else
     let rec loop acc left seq =
@@ -288,7 +303,7 @@ let next_n_compiled compiled ~from n =
         | Seq.Nil -> List.rev acc
         | Seq.Cons (t, tail) -> loop (t :: acc) (left - 1) tail
     in
-    loop [] n (fire_times_compiled compiled ~from)
+    loop [] n (fire_times_compiled ?until compiled ~from)
 
 let within_compiled compiled ~from ~until =
   let rec loop acc seq =
@@ -297,13 +312,13 @@ let within_compiled compiled ~from ~until =
     | Seq.Cons (t, tail) ->
         if Ptime.compare t until > 0 then List.rev acc else loop (t :: acc) tail
   in
-  loop [] (fire_times_compiled compiled ~from)
+  loop [] (fire_times_compiled ~until compiled ~from)
 
-let fire_times ?(timezone = Timezone.utc) expr ~from =
-  fire_times_compiled (compile ~timezone expr) ~from
+let fire_times ?(timezone = Timezone.utc) ?until expr ~from =
+  fire_times_compiled ?until (compile ~timezone expr) ~from
 
-let next_n ?(timezone = Timezone.utc) expr ~from n =
-  next_n_compiled (compile ~timezone expr) ~from n
+let next_n ?(timezone = Timezone.utc) ?until expr ~from n =
+  next_n_compiled ?until (compile ~timezone expr) ~from n
 
 let within ?(timezone = Timezone.utc) expr ~from ~until =
   within_compiled (compile ~timezone expr) ~from ~until

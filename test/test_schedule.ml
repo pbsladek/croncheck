@@ -143,6 +143,69 @@ let test_macro_schedule () =
     [ time 2024 1 2 0 0; time 2024 1 3 0 0 ]
     times
 
+let test_quartz_fold_order () =
+  let timezone = iana "America/New_York" in
+  let from =
+    Option.get (Ptime.of_rfc3339 "2024-11-03T05:29:59Z" |> Result.to_option)
+    |> fun (t, _, _) -> t
+  in
+  let first = time 2024 11 3 5 30 in
+  let expected =
+    List.init 124 (fun n ->
+        Option.get (Ptime.add_span first (Ptime.Span.of_int_s (n * 30))))
+  in
+  Alcotest.(check (list ptime))
+    "both fold occurrences in UTC order" expected
+    (Schedule.next_n ~timezone (expr "0,30 * * * * ?") ~from 124);
+  let second = time 2024 11 3 6 30 in
+  Alcotest.(check (list ptime))
+    "start inside second occurrence"
+    [
+      Option.get (Ptime.add_span second (Ptime.Span.of_int_s 30));
+      time 2024 11 3 6 31;
+    ]
+    (Schedule.next_n ~timezone (expr "0,30 * * * * ?") ~from:second 2)
+
+let test_bounded_sparse_schedule () =
+  let schedule = expr "0 0 0 * * ? 2199" in
+  let from = time 2024 1 1 0 0 in
+  let until = time 2024 1 2 0 0 in
+  let compiled = Schedule.compile schedule in
+  Alcotest.(check (list ptime))
+    "within a day" []
+    (Schedule.within_compiled compiled ~from ~until);
+  Alcotest.(check int)
+    "count within a day" 0
+    (Schedule.count_within compiled ~from ~until);
+  Alcotest.(check (list ptime))
+    "bounded next" []
+    (Schedule.next_n_compiled ~until compiled ~from 1);
+  Alcotest.(check (list ptime))
+    "reversed window" []
+    (Schedule.within schedule ~from:until ~until:from);
+  Alcotest.(check (list ptime))
+    "empty window" []
+    (Schedule.within schedule ~from ~until:from)
+
+let test_quartz_until_between_seconds () =
+  let schedule = expr "30 * * * * ?" in
+  let from = time 2024 1 1 0 0 in
+  let thirty = Option.get (Ptime.add_span from (Ptime.Span.of_int_s 30)) in
+  let before = Option.get (Ptime.add_span from (Ptime.Span.of_int_s 10)) in
+  Alcotest.(check (list ptime))
+    "stop before first second" []
+    (Schedule.within schedule ~from ~until:before);
+  Alcotest.(check (list ptime))
+    "include end boundary" [ thirty ]
+    (Schedule.within schedule ~from ~until:thirty);
+  Alcotest.(check (list ptime))
+    "exclude start boundary" []
+    (Schedule.within schedule ~from:thirty ~until:thirty);
+  let until = Option.get (Ptime.add_span from (Ptime.Span.of_int_s 70)) in
+  Alcotest.(check (list ptime))
+    "matching minute has no seconds before end" []
+    (Schedule.within (expr "30 1 * * * ?") ~from ~until)
+
 let () =
   Alcotest.run "schedule"
     [
@@ -165,5 +228,11 @@ let () =
           Alcotest.test_case "names" `Quick test_names_schedule;
           Alcotest.test_case "named steps" `Quick test_named_step_schedule;
           Alcotest.test_case "macros" `Quick test_macro_schedule;
+          Alcotest.test_case "quartz fold ordering" `Quick
+            test_quartz_fold_order;
+          Alcotest.test_case "bounded sparse schedule" `Quick
+            test_bounded_sparse_schedule;
+          Alcotest.test_case "quartz end between seconds" `Quick
+            test_quartz_until_between_seconds;
         ] );
     ]

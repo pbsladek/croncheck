@@ -91,6 +91,30 @@ let test_overlaps () =
   in
   Alcotest.(check int) "overlaps in one hour" 59 (List.length overlaps)
 
+let test_bounded_sparse_analyses () =
+  let future = expr "0 0 0 * * ? 2199" in
+  let daily = expr "@daily" in
+  let from = time 2024 1 1 0 0 in
+  let until = time 2024 1 2 0 0 in
+  Alcotest.(check int)
+    "no conflicts in window" 0
+    (List.length
+       (Analysis.conflicts ~expr_a:future ~expr_b:daily ~from ~until
+          ~threshold:0));
+  Alcotest.(check int)
+    "no overlaps in window" 0
+    (List.length (Analysis.overlaps future ~from ~until ~duration:120));
+  Alcotest.(check int)
+    "no differences in empty window" 0
+    (List.length (Analysis.diff future ~expr_b:future ~from ~until));
+  let job = Result.get_ok (Job.make ~source:Job.Cli "0 0 0 * * ? 2199") in
+  Alcotest.(check int)
+    "no midnight policy violation in window" 0
+    (List.length
+       (Policy.evaluate ~timezone:Timezone.utc ~from ~until
+          [ Policy.disallow_midnight_utc ]
+          [ job ]))
+
 let () =
   Alcotest.run "analysis"
     [
@@ -112,5 +136,7 @@ let () =
         [
           Alcotest.test_case "conflicts" `Quick test_conflicts;
           Alcotest.test_case "overlaps" `Quick test_overlaps;
+          Alcotest.test_case "bounded sparse analyses" `Quick
+            test_bounded_sparse_analyses;
         ] );
     ]

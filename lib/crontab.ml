@@ -15,6 +15,15 @@ let parse_env_assignment line =
       let value =
         String.sub line (eq + 1) (String.length line - eq - 1) |> trim
       in
+      let value =
+        let len = String.length value in
+        if
+          len >= 2
+          && ((value.[0] = '"' && value.[len - 1] = '"')
+             || (value.[0] = '\'' && value.[len - 1] = '\''))
+        then String.sub value 1 (len - 2)
+        else value
+      in
       let valid_name_char = function
         | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' -> true
         | _ -> false

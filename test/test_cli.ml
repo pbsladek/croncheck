@@ -72,6 +72,24 @@ let test_overlaps_duration_with_unit () =
     "exit code" 1
     (run [ "overlaps"; "* * * * *"; "--window"; "5m"; "--duration"; "120s" ])
 
+let test_window_overflow () =
+  let path = write_temp "0 0 * * * /bin/job\n" in
+  Fun.protect
+    ~finally:(fun () -> Sys.remove path)
+    (fun () ->
+      List.iter
+        (fun args ->
+          Alcotest.(check int)
+            (List.hd args) 3
+            (run (args @ [ "--from"; "9999-12-31"; "--window"; "1d" ])))
+        [
+          [ "check"; "--from-crontab"; path ];
+          [ "load"; "--from-crontab"; path ];
+          [ "conflicts"; "@daily"; "@daily" ];
+          [ "overlaps"; "@daily" ];
+          [ "diff"; "@daily"; "@hourly" ];
+        ])
+
 let () =
   Alcotest.run "cli"
     [
@@ -92,5 +110,6 @@ let () =
             test_check_policy_file_fail_on_none;
           Alcotest.test_case "overlaps duration with unit" `Quick
             test_overlaps_duration_with_unit;
+          Alcotest.test_case "window overflow" `Quick test_window_overflow;
         ] );
     ]

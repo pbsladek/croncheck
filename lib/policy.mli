@@ -35,7 +35,7 @@ val evaluate :
   Job.t list ->
   violation list
 (** Evaluate rules inside the same bounded window used by schedule analysis.
-    Rules that enumerate fire times must not inspect outside [[from], [until]].
-*)
+    Rules that enumerate fire times inspect instants strictly after [from] and
+    at or before [until]. *)
 
 val rule_to_string : rule -> string

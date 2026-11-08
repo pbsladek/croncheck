@@ -38,8 +38,9 @@ val analyze :
   duration:int option ->
   Job.t list ->
   report
-(** Analyze valid jobs over [[from], [until]]. [threshold] is a conflict
-    distance in seconds. [duration] enables self-overlap checks when present. *)
+(** Analyze valid jobs strictly after [from] and at or before [until].
+    [threshold] is a conflict distance in seconds. [duration] enables
+    self-overlap checks when present. *)
 
 val analyze_with_policy :
   timezone:Timezone.t ->

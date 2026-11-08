@@ -88,8 +88,8 @@ let warn ?(timezone = Timezone.utc) ?(from = default_from) expr =
   |> List.filter_map Fun.id
 
 let conflicts_with_timezone ~timezone ~expr_a ~expr_b ~from ~until ~threshold =
-  let a = Schedule.fire_times ~timezone expr_a ~from in
-  let b = Schedule.fire_times ~timezone expr_b ~from in
+  let a = Schedule.fire_times ~timezone ~until expr_a ~from in
+  let b = Schedule.fire_times ~timezone ~until expr_b ~from in
   let next seq =
     match seq () with
     | Seq.Nil -> None
@@ -154,8 +154,8 @@ type diff_side = Left | Right | Both
 type diff_entry = { side : diff_side; time : Ptime.t }
 
 let diff ?(timezone = Timezone.utc) expr_a ~expr_b ~from ~until =
-  let a = Schedule.fire_times ~timezone expr_a ~from in
-  let b = Schedule.fire_times ~timezone expr_b ~from in
+  let a = Schedule.fire_times ~timezone ~until expr_a ~from in
+  let b = Schedule.fire_times ~timezone ~until expr_b ~from in
   let next seq =
     match seq () with
     | Seq.Nil -> None
@@ -180,7 +180,7 @@ let diff ?(timezone = Timezone.utc) expr_a ~expr_b ~from ~until =
   walk [] (next a) (next b)
 
 let overlaps ?(timezone = Timezone.utc) expr ~from ~until ~duration =
-  let seq = Schedule.fire_times ~timezone expr ~from in
+  let seq = Schedule.fire_times ~timezone ~until expr ~from in
   let next seq =
     match seq () with
     | Seq.Nil -> None
