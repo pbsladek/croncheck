@@ -51,6 +51,8 @@ let time_format_conv =
   Arg.conv (parse, print)
 
 let parse_duration s =
+  (* Accept bare seconds for backward compatibility, but print and document the
+     explicit unit form so all duration-valued flags share one convention. *)
   let len = String.length s in
   if len = 0 then Error (`Msg "expected duration like 30s, 24h, or 7d")
   else
@@ -222,6 +224,8 @@ let read_stdin_lines () =
 
 let check_cmd =
   let effective_fail_on ~cli ~policy =
+    (* The CLI is the most specific execution context.  Policy files can define
+       a repository default, and the built-in default remains "all". *)
     match cli with
     | Some fail_on -> fail_on
     | None ->
@@ -739,6 +743,8 @@ let explain_cmd =
 
 let doctor_cmd =
   let run timezone_name =
+    (* [doctor] should explain the runtime even when optional timezone data is
+       absent; only command-line parsing errors should make it fail. *)
     let root_status root =
       let available =
         try Sys.file_exists root && Sys.is_directory root
