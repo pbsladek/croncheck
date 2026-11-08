@@ -70,16 +70,30 @@ let parse_doc lines =
     | 0, Some _ -> Some `Top
     | _ -> None
   in
-  let rec loop section doc = function
+  let rec loop section child_indent doc = function
     | [] -> doc
     | (line_no, raw) :: rest ->
         let line = trim raw in
         if line = "" || String.starts_with ~prefix:"#" line then
-          loop section doc rest
+          loop section child_indent doc rest
         else
-          let section = Option.value (section_for raw) ~default:section in
+          let section, child_indent =
+            match section_for raw with
+            | Some section -> (section, None)
+            | None -> (section, child_indent)
+          in
+          let depth = indent raw in
+          let child_indent =
+            if depth > 0 && child_indent = None then Some depth
+            else child_indent
+          in
+          let direct_child =
+            match section with
+            | `Top -> depth = 0
+            | `Metadata | `Spec -> child_indent = Some depth
+          in
           let doc =
-            match (section, key_value line) with
+            match (section, if direct_child then key_value line else None) with
             | `Top, Some ("kind", value) -> { doc with kind = Some value }
             | `Metadata, Some ("name", value) -> { doc with name = Some value }
             | `Metadata, Some ("namespace", value) ->
@@ -90,9 +104,9 @@ let parse_doc lines =
                 { doc with timezone = Some (value, line_no) }
             | _ -> doc
           in
-          loop section doc rest
+          loop section child_indent doc rest
   in
-  loop `Top empty_doc lines
+  loop `Top None empty_doc lines
 
 let job_of_doc source_path doc =
   match doc.kind with

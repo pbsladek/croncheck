@@ -151,10 +151,13 @@ let from_arg =
 
 let now () = Ptime_clock.now ()
 
-let add_seconds t seconds =
-  match Ptime.add_span t (Ptime.Span.of_int_s seconds) with
-  | Some t -> t
-  | None -> invalid_arg "time window out of range"
+let with_window ~from ~seconds f =
+  match Ptime.add_span from (Ptime.Span.of_int_s seconds) with
+  | Some until -> f until
+  | None ->
+      print_error "analysis window exceeds the supported timestamp range"
+        ~hint:"Choose an earlier --from time or a smaller --window.";
+      3
 
 let exit_for_findings found = if found then 1 else 0
 
@@ -265,42 +268,42 @@ let check_cmd =
           | Error errors ->
               print_input_errors errors;
               2
-          | Ok jobs -> (
+          | Ok jobs ->
               let from = Option.value from_opt ~default:(now ()) in
-              let until = add_seconds from window in
-              match policy_path with
-              | None ->
-                  let fail_on =
-                    effective_fail_on ~cli:fail_on_opt ~policy:None
-                  in
-                  let report =
-                    Croncheck_lib.Check.analyze ~timezone ~from ~until
-                      ~threshold ~duration jobs
-                  in
-                  Croncheck_lib.Output.pp_check ~timezone Format.std_formatter
-                    ~format ~time_format report;
-                  exit_for_findings
-                    (Croncheck_lib.Check.has_findings_for fail_on report)
-              | Some path -> (
-                  match Croncheck_lib.Policy.parse_config_file path with
-                  | Error errors ->
-                      print_input_errors errors;
-                      2
-                  | Ok policy_config ->
+              with_window ~from ~seconds:window (fun until ->
+                  match policy_path with
+                  | None ->
                       let fail_on =
-                        effective_fail_on ~cli:fail_on_opt
-                          ~policy:(Some policy_config)
+                        effective_fail_on ~cli:fail_on_opt ~policy:None
                       in
                       let report =
-                        Croncheck_lib.Check.analyze_with_policy ~timezone ~from
-                          ~until ~threshold ~duration
-                          ~policy:policy_config.rules jobs
+                        Croncheck_lib.Check.analyze ~timezone ~from ~until
+                          ~threshold ~duration jobs
                       in
-                      Croncheck_lib.Output.pp_check_with_policy ~timezone
+                      Croncheck_lib.Output.pp_check ~timezone
                         Format.std_formatter ~format ~time_format report;
                       exit_for_findings
-                        (Croncheck_lib.Check.has_policy_findings_for fail_on
-                           report))))
+                        (Croncheck_lib.Check.has_findings_for fail_on report)
+                  | Some path -> (
+                      match Croncheck_lib.Policy.parse_config_file path with
+                      | Error errors ->
+                          print_input_errors errors;
+                          2
+                      | Ok policy_config ->
+                          let fail_on =
+                            effective_fail_on ~cli:fail_on_opt
+                              ~policy:(Some policy_config)
+                          in
+                          let report =
+                            Croncheck_lib.Check.analyze_with_policy ~timezone
+                              ~from ~until ~threshold ~duration
+                              ~policy:policy_config.rules jobs
+                          in
+                          Croncheck_lib.Output.pp_check_with_policy ~timezone
+                            Format.std_formatter ~format ~time_format report;
+                          exit_for_findings
+                            (Croncheck_lib.Check.has_policy_findings_for fail_on
+                               report))))
   in
   let term =
     Term.(
@@ -399,14 +402,14 @@ let load_cmd =
               2
           | Ok jobs ->
               let from = Option.value from_opt ~default:(now ()) in
-              let until = add_seconds from window in
-              let report =
-                Croncheck_lib.Load.analyze ~timezone ~from ~until
-                  ~bucket_seconds:bucket jobs
-              in
-              Croncheck_lib.Output.pp_load ~time_format Format.std_formatter
-                ~format report;
-              0)
+              with_window ~from ~seconds:window (fun until ->
+                  let report =
+                    Croncheck_lib.Load.analyze ~timezone ~from ~until
+                      ~bucket_seconds:bucket jobs
+                  in
+                  Croncheck_lib.Output.pp_load ~time_format Format.std_formatter
+                    ~format report;
+                  0))
   in
   let term =
     Term.(
@@ -470,16 +473,8 @@ let next_cmd =
         | Ok expr ->
             let from = Option.value from_opt ~default:(now ()) in
             let times =
-              match until_opt with
-              | None -> Croncheck_lib.Schedule.next_n ~timezone expr ~from count
-              | Some until ->
-                  let rec take n = function
-                    | [] -> []
-                    | _ when n = 0 -> []
-                    | x :: rest -> x :: take (n - 1) rest
-                  in
-                  take count
-                    (Croncheck_lib.Schedule.within ~timezone expr ~from ~until)
+              Croncheck_lib.Schedule.next_n ~timezone ?until:until_opt expr
+                ~from count
             in
             Croncheck_lib.Output.pp_next ~timezone ~gaps Format.std_formatter
               ~format ~time_format ~expr:raw times;
@@ -557,20 +552,20 @@ let conflicts_cmd =
             2
         | Ok expr_a, Ok expr_b ->
             let from = Option.value from_opt ~default:(now ()) in
-            let until = add_seconds from window in
-            let conflicts =
-              Croncheck_lib.Analysis.conflicts_with_timezone ~timezone ~expr_a
-                ~expr_b ~from ~until ~threshold
-              |> List.map (fun c ->
-                  {
-                    c with
-                    Croncheck_lib.Analysis.expr_a = raw_a;
-                    expr_b = raw_b;
-                  })
-            in
-            Croncheck_lib.Output.pp_conflicts ~timezone Format.std_formatter
-              ~format ~time_format conflicts;
-            exit_for_findings (conflicts <> []))
+            with_window ~from ~seconds:window (fun until ->
+                let conflicts =
+                  Croncheck_lib.Analysis.conflicts_with_timezone ~timezone
+                    ~expr_a ~expr_b ~from ~until ~threshold
+                  |> List.map (fun c ->
+                      {
+                        c with
+                        Croncheck_lib.Analysis.expr_a = raw_a;
+                        expr_b = raw_b;
+                      })
+                in
+                Croncheck_lib.Output.pp_conflicts ~timezone Format.std_formatter
+                  ~format ~time_format conflicts;
+                exit_for_findings (conflicts <> [])))
   in
   let term =
     Term.(
@@ -615,14 +610,14 @@ let overlaps_cmd =
             2
         | Ok expr ->
             let from = Option.value from_opt ~default:(now ()) in
-            let until = add_seconds from window in
-            let overlaps =
-              Croncheck_lib.Analysis.overlaps ~timezone expr ~from ~until
-                ~duration
-            in
-            Croncheck_lib.Output.pp_overlaps ~timezone Format.std_formatter
-              ~format ~time_format overlaps;
-            exit_for_findings (overlaps <> []))
+            with_window ~from ~seconds:window (fun until ->
+                let overlaps =
+                  Croncheck_lib.Analysis.overlaps ~timezone expr ~from ~until
+                    ~duration
+                in
+                Croncheck_lib.Output.pp_overlaps ~timezone Format.std_formatter
+                  ~format ~time_format overlaps;
+                exit_for_findings (overlaps <> [])))
   in
   let term =
     Term.(
@@ -669,19 +664,22 @@ let diff_cmd =
             2
         | Ok expr_a, Ok expr_b ->
             let from = Option.value from_opt ~default:(now ()) in
-            let until = add_seconds from window in
-            let entries =
-              Croncheck_lib.Analysis.diff ~timezone expr_a ~expr_b ~from ~until
-            in
-            Croncheck_lib.Output.pp_diff ~timezone ~time_format
-              Format.std_formatter ~format ~expr_a:raw_a ~expr_b:raw_b entries;
-            let differs =
-              List.exists
-                (fun e ->
-                  e.Croncheck_lib.Analysis.side <> Croncheck_lib.Analysis.Both)
-                entries
-            in
-            exit_for_findings differs)
+            with_window ~from ~seconds:window (fun until ->
+                let entries =
+                  Croncheck_lib.Analysis.diff ~timezone expr_a ~expr_b ~from
+                    ~until
+                in
+                Croncheck_lib.Output.pp_diff ~timezone ~time_format
+                  Format.std_formatter ~format ~expr_a:raw_a ~expr_b:raw_b
+                  entries;
+                let differs =
+                  List.exists
+                    (fun e ->
+                      e.Croncheck_lib.Analysis.side
+                      <> Croncheck_lib.Analysis.Both)
+                    entries
+                in
+                exit_for_findings differs))
   in
   let term =
     Term.(

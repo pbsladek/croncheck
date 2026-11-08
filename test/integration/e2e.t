@@ -26,7 +26,7 @@ next: short -n flag works; plain format prints a header.
 
 next: fixed-offset timezone appears in header and output.
 
-  $ croncheck next "0 9 * JAN MON-FRI" --count 2 --tz +02:00
+  $ croncheck next "0 9 * JAN MON-FRI" --from 2026-12-31 --count 2 --tz +02:00
   Next fire times for 0 9 * JAN MON-FRI (+02:00):
   2027-01-01T09:00:00+02:00
   2027-01-04T09:00:00+02:00
@@ -38,7 +38,7 @@ next: IANA timezone name appears in header.
 
 next: human format shows month name, weekday, and time.
 
-  $ croncheck next "0 9 * JAN MON-FRI" --count 1 --tz +02:00 --time-format human
+  $ croncheck next "0 9 * JAN MON-FRI" --from 2026-12-31 --count 1 --tz +02:00 --time-format human
   Next fire times for 0 9 * JAN MON-FRI (+02:00):
   January 1 Fri 2027 at 9:00 AM +02:00
 
@@ -49,7 +49,7 @@ next: Quartz six-field expression is accepted.
 
 next: Quartz seven-field expression with year field.
 
-  $ croncheck next "0 0 0 ? JAN MON 2027" --count 1
+  $ croncheck next "0 0 0 ? JAN MON 2027" --from 2026-12-31 --count 1
   Next fire times for 0 0 0 ? JAN MON 2027 (UTC):
   2027-01-04T00:00:00Z
 
@@ -536,5 +536,34 @@ warn: every-hour expression (Any hour field) does not trigger DST warning.
 
 help: tool description is shown.
 
-  $ croncheck --help | grep "Static analysis"
-         croncheck - Static analysis for POSIX and basic Quartz cron
+  $ croncheck --help=plain | grep -o "Static analysis"
+  Static analysis
+
+next: a count limit bounds work even with a distant end date.
+
+  $ croncheck next "* * * * *" --from 2024-01-01 --until 2199-01-01 --count 0
+  Next fire times for * * * * * (UTC):
+
+  $ croncheck next "* * * * *" --from 2024-01-01 --until 2199-01-01 --count 1
+  Next fire times for * * * * * (UTC):
+  2024-01-01T00:01:00Z
+
+next: a schedule with no fires inside the window stops searching at the end.
+
+  $ croncheck next "0 0 0 * * ? 2199" --from 2024-01-01 --until 2024-01-02
+  Next fire times for 0 0 0 * * ? 2199 (UTC):
+
+conflicts: an overflowing analysis window is a usage error.
+
+  $ croncheck conflicts "@daily" "@daily" --from 9999-12-31 --window 1d 2>&1
+  Error: analysis window exceeds the supported timestamp range
+  Hint: Choose an earlier --from time or a smaller --window.
+  [3]
+
+explain: Quartz fields and mixed weekday lists are preserved.
+
+  $ croncheck explain "30 0 9 15 * MON 2027"
+  at 9:00 AM at second(s) 30 on 15th and Monday in year(s) 2027
+
+  $ croncheck explain "0 9 * * MON,WED-FRI"
+  at 9:00 AM on Monday, Wednesday, Thursday, Friday

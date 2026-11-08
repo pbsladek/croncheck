@@ -181,7 +181,7 @@ let fires_at_midnight_utc ~timezone ~from ~until job =
           let _, ((hour, minute, second), _) = Ptime.to_date_time t in
           (hour = 0 && minute = 0 && second = 0) || loop rest
   in
-  loop (Schedule.fire_times ~timezone job.Job.expr ~from)
+  loop (Schedule.fire_times ~timezone ~until job.Job.expr ~from)
 
 let rule_to_string = function
   | ForbidEveryMinute -> "forbid_every_minute"

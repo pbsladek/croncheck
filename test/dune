@@ -1,4 +1,5 @@
 (tests
  (names test_cron test_schedule test_analysis test_input test_cli test_output
    test_check test_job test_explain test_load test_policy)
+ (deps ../bin/main.exe)
  (libraries croncheck_lib alcotest ptime unix))

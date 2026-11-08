@@ -515,7 +515,12 @@ let parse_offset s =
     in
     match sign with
     | None -> None
-    | Some sign when s.[3] = ':' -> (
+    | Some sign
+      when s.[3] = ':'
+           && is_digit s.[1]
+           && is_digit s.[2]
+           && is_digit s.[4]
+           && is_digit s.[5] -> (
         let hours = int_of_string_opt (String.sub s 1 2) in
         let minutes = int_of_string_opt (String.sub s 4 2) in
         match (hours, minutes) with

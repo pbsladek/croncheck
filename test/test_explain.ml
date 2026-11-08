@@ -49,6 +49,27 @@ let test_every_minute_during_hour () =
 let test_every_n_minutes_during_hour () =
   check "every 5 min hour 9" "every 5 minutes during hour 9" "*/5 9 * * *"
 
+let test_mixed_lists () =
+  check "weekday range in list"
+    "at 9:00 AM on Monday, Wednesday, Thursday, Friday" "0 9 * * MON,WED-FRI";
+  check "month range in list" "at midnight in January, March, April, May"
+    "0 0 * JAN,MAR-MAY *";
+  check "day steps in list" "at midnight on 1st, 3rd, 5th, 7th"
+    "0 0 1,3-7/2 * *";
+  check "Sunday alias in stepped range" "at midnight on Sunday, Friday"
+    "0 0 * * 5-7/2,0"
+
+let test_quartz_fields () =
+  check "seconds, year, and day conjunction"
+    "at 9:00 AM at second(s) 30 on 15th and Monday in year(s) 2027"
+    "30 0 9 15 * MON 2027";
+  check "every second" "every minute at every second" "* * * ? * *";
+  check "second list and year range"
+    "at midnight at second(s) 0, 30 in year(s) 2027 through 2029"
+    "0,30 0 0 * * ? 2027-2029";
+  check "explicit wildcard year"
+    "at midnight at second(s) 0 in years 1970 through 2199" "0 0 0 * * ? *"
+
 let () =
   Alcotest.run "explain"
     [
@@ -75,6 +96,8 @@ let () =
         ] );
       ( "complex",
         [
+          Alcotest.test_case "mixed lists" `Quick test_mixed_lists;
+          Alcotest.test_case "quartz fields" `Quick test_quartz_fields;
           Alcotest.test_case "every minute during hour" `Quick
             test_every_minute_during_hour;
           Alcotest.test_case "every N minutes during hour" `Quick

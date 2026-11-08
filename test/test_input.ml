@@ -181,6 +181,79 @@ let test_kubernetes_missing_file () =
       Alcotest.failf "expected one error, got %d" (List.length errors)
   | Ok _ -> Alcotest.fail "expected missing file to fail"
 
+let test_crontab_quoted_timezone () =
+  List.iter
+    (fun raw ->
+      match
+        Crontab.parse_lines ~source_path:"crontab"
+          [ "CRON_TZ=" ^ raw; "0 9 * * * /bin/job" ]
+      with
+      | Ok [ job ] ->
+          Alcotest.(check (option string))
+            raw (Some "UTC")
+            (Option.map Timezone.to_string job.timezone)
+      | _ -> Alcotest.failf "failed quoted timezone %s" raw)
+    [ "\"UTC\""; "'UTC'"; "  \"UTC\"  " ];
+  match
+    Crontab.parse_lines ~source_path:"crontab"
+      [ "CRON_TZ=\"UTC'"; "0 9 * * * /bin/job" ]
+  with
+  | Error _ -> ()
+  | Ok _ -> Alcotest.fail "mismatched timezone quotes must fail"
+
+let test_kubernetes_nested_fields () =
+  List.iter
+    (fun width ->
+      let child line = String.make width ' ' ^ line in
+      let nested line = String.make (2 * width) ' ' ^ line in
+      let lines =
+        [
+          "kind: CronJob";
+          "metadata:";
+          child "name: outer";
+          child "namespace: ops";
+          child "annotations:";
+          nested "name: inner";
+          nested "namespace: wrong";
+          nested "kind: ConfigMap";
+          "spec:";
+          child "schedule: \"0 9 * * *\"";
+          child "timeZone: UTC";
+          child "jobTemplate:";
+          nested "schedule: \"0 2 * * *\"";
+          nested "timeZone: No/Such_Zone";
+          "status:";
+          child "kind: ConfigMap";
+        ]
+      in
+      match Kubernetes.parse_lines ~source_path:"jobs.yaml" lines with
+      | Ok [ job ] ->
+          Alcotest.(check (option string))
+            "outer identity" (Some "ops/outer") job.id;
+          Alcotest.(check string) "outer schedule" "0 9 * * *" job.expr_raw;
+          Alcotest.(check (option string))
+            "outer timezone" (Some "UTC")
+            (Option.map Timezone.to_string job.timezone)
+      | _ -> Alcotest.fail "nested fields must not replace direct children")
+    [ 2; 4 ]
+
+let test_timezone_offset_digits () =
+  List.iter
+    (fun raw ->
+      match Timezone.parse raw with
+      | Error _ -> ()
+      | Ok _ -> Alcotest.failf "accepted malformed offset %s" raw)
+    [ "+01:-1"; "+-1:00"; "++1:00"; "+01:+1"; "+0_:00"; "+24:00"; "+00:60" ];
+  List.iter
+    (fun raw ->
+      match Timezone.parse raw with
+      | Ok timezone ->
+          Alcotest.(check string)
+            "valid offset" raw
+            (Timezone.to_string timezone)
+      | Error message -> Alcotest.fail message)
+    [ "+23:59"; "-23:59"; "-00:30"; "+00:00" ]
+
 let () =
   Alcotest.run "input"
     [
@@ -189,6 +262,8 @@ let () =
           Alcotest.test_case "user" `Quick test_crontab_user;
           Alcotest.test_case "system" `Quick test_crontab_system;
           Alcotest.test_case "cron tz" `Quick test_crontab_cron_tz;
+          Alcotest.test_case "quoted cron tz" `Quick
+            test_crontab_quoted_timezone;
           Alcotest.test_case "invalid cron tz" `Quick
             test_crontab_invalid_cron_tz;
           Alcotest.test_case "macro" `Quick test_crontab_macro;
@@ -200,10 +275,16 @@ let () =
       ( "kubernetes",
         [
           Alcotest.test_case "cronjob yaml" `Quick test_kubernetes_yaml;
+          Alcotest.test_case "nested fields" `Quick
+            test_kubernetes_nested_fields;
           Alcotest.test_case "iana timezone" `Quick
             test_kubernetes_iana_timezone;
           Alcotest.test_case "reject embedded timezone" `Quick
             test_kubernetes_rejects_embedded_timezone;
           Alcotest.test_case "missing file" `Quick test_kubernetes_missing_file;
+        ] );
+      ( "timezone",
+        [
+          Alcotest.test_case "offset digits" `Quick test_timezone_offset_digits;
         ] );
     ]
