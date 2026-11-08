@@ -18,6 +18,8 @@ type policy_report = {
 type finding_kind = Warnings | Conflicts | Overlaps | Policy
 
 let split_stdin_label line =
+  (* Treat only a non-empty prefix and suffix as a label.  Otherwise the whole
+     line remains the expression so parse errors still point at the user's text. *)
   match String.index_opt line ':' with
   | None -> (None, line)
   | Some index ->
@@ -79,11 +81,16 @@ let job_timezone fallback job = Option.value job.Job.timezone ~default:fallback
 type scheduled_job = { job : Job.t; fires : Ptime.t list }
 
 let schedule_job ~timezone ~from ~until job =
+  (* Source-specific timezones take precedence over the CLI default; this lets
+     CRON_TZ and Kubernetes spec.timeZone carry schedule intent with the job. *)
   let timezone = job_timezone timezone job in
   let compiled = Schedule.compile ~timezone job.Job.expr in
   { job; fires = Schedule.within_compiled compiled ~from ~until }
 
 let pairwise_conflicts ~threshold scheduled_jobs =
+  (* Fire times are enumerated once per job, then compared pairwise.  This keeps
+     conflict detection independent from the source format and avoids repeated
+     schedule traversal for each pair. *)
   let rec loop acc = function
     | [] | [ _ ] -> List.rev acc
     | scheduled :: rest ->
@@ -135,6 +142,8 @@ let has_policy_findings policy_report =
   has_findings policy_report.report || policy_report.policy_violations <> []
 
 let has_kind report = function
+  (* [Policy] belongs to [policy_report]; a plain report cannot contain those
+     findings, so it is deliberately false here. *)
   | Warnings ->
       List.exists (fun (_, warnings) -> warnings <> []) report.warnings
   | Conflicts -> report.conflicts <> []

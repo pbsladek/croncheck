@@ -1,7 +1,12 @@
 type compiled
+(** Expanded schedule ready for repeated matching or enumeration. Compilation
+    fixes the timezone and precomputes field membership. *)
 
 val compile : ?timezone:Timezone.t -> Cron.expr -> compiled
+
 val matches_compiled : compiled -> Ptime.t -> bool
+(** [matches_compiled c t] tests [t] against the local wall time selected by
+    [c]'s timezone. *)
 
 val fire_times_compiled :
   ?until:Ptime.t -> compiled -> from:Ptime.t -> Ptime.t Seq.t
@@ -11,6 +16,8 @@ val fire_times_compiled :
 
 val count_within :
   ?limit:int -> compiled -> from:Ptime.t -> until:Ptime.t -> int
+(** Count fires strictly after [from] and at or before [until], stopping early
+    at [limit] when supplied. *)
 
 val next_n_compiled :
   ?until:Ptime.t -> compiled -> from:Ptime.t -> int -> Ptime.t list
@@ -18,6 +25,8 @@ val next_n_compiled :
 *)
 
 val within_compiled : compiled -> from:Ptime.t -> until:Ptime.t -> Ptime.t list
+(** Enumerate fires strictly after [from] and at or before [until]. Returned
+    instants are ascending and deduplicated. *)
 
 val fire_times :
   ?timezone:Timezone.t ->
@@ -25,6 +34,7 @@ val fire_times :
   Cron.expr ->
   from:Ptime.t ->
   Ptime.t Seq.t
+(** Convenience wrapper around [compile] and [fire_times_compiled]. *)
 
 val next_n :
   ?timezone:Timezone.t ->
@@ -42,3 +52,4 @@ val within :
   Ptime.t list
 
 val matches : ?timezone:Timezone.t -> Cron.expr -> Ptime.t -> bool
+(** Convenience wrapper around [compile] and [matches_compiled]. *)
